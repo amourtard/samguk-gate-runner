@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/run.gd" id="1_run"]
+[ext_resource type="Script" path="res://scripts/road_view.gd" id="2_road"]
+[ext_resource type="Script" path="res://scripts/army_view.gd" id="3_army"]
+
+[sub_resource type="Environment" id="Environment_run"]
+background_mode = 1
+background_color = Color(0.62, 0.74, 0.86, 1)
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.5
+
+[node name="Run" type="Node3D"]
+script = ExtResource("1_run")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_run")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.573576, 0.819152, 0, -0.819152, 0.573576, 0, 10, 0)
+
+[node name="RoadView" type="Node3D" parent="."]
+script = ExtResource("2_road")
+
+[node name="ArmyView" type="MultiMeshInstance3D" parent="."]
+script = ExtResource("3_army")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+current = true

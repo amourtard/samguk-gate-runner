@@ -1,0 +1,7 @@
+# Godot 4 캐시
+.godot/
+/android/
+
+# OS
+.DS_Store
+Thumbs.db

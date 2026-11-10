@@ -1,0 +1,26 @@
+{
+	"infantry": {
+		"name": "보병",
+		"health": 10,
+		"dps": 2,
+		"range": 0,
+		"charge_damage": 0,
+		"mesh": { "shape": "box", "size": [0.22, 0.36, 0.22] }
+	},
+	"archer": {
+		"name": "궁병",
+		"health": 6,
+		"dps": 3,
+		"range": 12,
+		"charge_damage": 0,
+		"mesh": { "shape": "cylinder", "radius": 0.07, "height": 0.42, "radial_segments": 8 }
+	},
+	"cavalry": {
+		"name": "기병",
+		"health": 14,
+		"dps": 3,
+		"range": 0,
+		"charge_damage": 8,
+		"mesh": { "shape": "box", "size": [0.22, 0.34, 0.5] }
+	}
+}

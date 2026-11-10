@@ -1,0 +1,54 @@
+{
+	"advance_speed": 8,
+	"lateral_max_speed": 12,
+	"section_length": 150,
+	"combat_advance_ratio": 0.2,
+	"gate_slowdown": {
+		"enabled": true,
+		"distance": 12,
+		"speed_ratio": 0.5
+	},
+	"melee_engage_limit": 20,
+	"melee_engage_limit_bridge": 8,
+	"ranged_fire_limit": 40,
+	"soldier_display_limit": 200,
+	"number_popup": {
+		"duration": 0.1,
+		"scale": 1.5
+	},
+	"screen_shake_duration": 0.08,
+	"road": {
+		"width": 10,
+		"lateral_limit": 4,
+		"visible_length": 220,
+		"behind_length": 30,
+		"surface_lift": 0.01,
+		"ground_size": 600,
+		"marker_spacing": 6,
+		"marker_size": [0.3, 0.3, 1.2]
+	},
+	"camera": {
+		"pitch_deg": 50,
+		"distance": 20,
+		"fov": 50,
+		"look_ahead": 4
+	},
+	"input": {
+		"drag_meters_per_screen_width": 10
+	},
+	"formation": {
+		"spacing": 0.26
+	},
+	"colors": {
+		"ally": "#3a6fe0",
+		"enemy": "#d83a3a",
+		"road": "#b9a27a",
+		"ground": "#5e7f4a",
+		"marker": "#eee6d2"
+	},
+	"debug": {
+		"start_unit": "infantry",
+		"start_count": 16,
+		"count_step": 10
+	}
+}
