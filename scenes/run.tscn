@@ -1,8 +1,11 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/run.gd" id="1_run"]
 [ext_resource type="Script" path="res://scripts/road_view.gd" id="2_road"]
 [ext_resource type="Script" path="res://scripts/army_view.gd" id="3_army"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="4_hud"]
+[ext_resource type="Script" path="res://scripts/sfx.gd" id="5_sfx"]
+[ext_resource type="Script" path="res://scripts/arrow_view.gd" id="6_arrow"]
 
 [sub_resource type="Environment" id="Environment_run"]
 background_mode = 1
@@ -26,5 +29,13 @@ script = ExtResource("2_road")
 [node name="ArmyView" type="MultiMeshInstance3D" parent="."]
 script = ExtResource("3_army")
 
+[node name="ArrowView" type="MultiMeshInstance3D" parent="."]
+script = ExtResource("6_arrow")
+
 [node name="Camera3D" type="Camera3D" parent="."]
 current = true
+
+[node name="Hud" parent="." instance=ExtResource("4_hud")]
+
+[node name="Sfx" type="Node" parent="."]
+script = ExtResource("5_sfx")

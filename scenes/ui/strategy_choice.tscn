@@ -1,0 +1,76 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/strategy_choice.gd" id="1_choice"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_card"]
+content_margin_left = 36.0
+content_margin_top = 28.0
+content_margin_right = 36.0
+content_margin_bottom = 28.0
+bg_color = Color(0.12, 0.12, 0.16, 0.95)
+border_width_left = 10
+border_width_top = 10
+border_width_right = 10
+border_width_bottom = 10
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[node name="StrategyChoice" type="CanvasLayer"]
+layer = 5
+script = ExtResource("1_choice")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 60
+theme_override_constants/margin_top = 200
+theme_override_constants/margin_right = 60
+theme_override_constants/margin_bottom = 120
+
+[node name="Box" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 48
+
+[node name="Title" type="Label" parent="Margin/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 80
+text = "책략 선택"
+horizontal_alignment = 1
+
+[node name="Cards" type="VBoxContainer" parent="Margin/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 36
+
+[node name="CardTemplate" type="Button" parent="Margin/Box/Cards"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 260)
+layout_mode = 2
+theme_override_font_sizes/font_size = 42
+theme_override_styles/normal = SubResource("StyleBox_card")
+text = "책략"
+autowrap_mode = 3
+
+[node name="OwnedLabel" type="Label" parent="Margin/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+text = "보유 책략 없음"
+horizontal_alignment = 1
+autowrap_mode = 3

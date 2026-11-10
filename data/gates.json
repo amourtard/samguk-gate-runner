@@ -1,0 +1,39 @@
+{
+	"reinforce": {
+		"name": "증원",
+		"color": "#2f6fe8",
+		"options": {
+			"add_10": { "add": 10 },
+			"add_20": { "add": 20 },
+			"add_30": { "add": 30 },
+			"mult_2": { "mult": 2, "min_section": 2 }
+		}
+	},
+	"switch": {
+		"name": "병종 전환",
+		"color": "#2fa84f",
+		"loss_ratio": 0.2
+	},
+	"empower": {
+		"name": "강화",
+		"color": "#d93636",
+		"options": {
+			"attack_speed": { "attack_speed_bonus": 0.5, "loss_ratio": 0.3 },
+			"armor": { "damage_taken_reduction": 0.3, "loss_ratio": 0.2 }
+		}
+	},
+	"gamble": {
+		"name": "도박",
+		"color": "#8e44c9",
+		"win_chance": 0.5,
+		"win_mult": 3,
+		"lose_divisor": 2,
+		"pair_with": ["reinforce"]
+	},
+	"trap": {
+		"name": "함정",
+		"color": "#8a8a8a",
+		"loss_ratio": 0.3,
+		"gold_bonus": 100
+	}
+}

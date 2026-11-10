@@ -1,0 +1,86 @@
+{
+	"offer_count": 3,
+	"family_bonus_count": 2,
+	"families": {
+		"mass": {
+			"name": "물량",
+			"color": "#7cc8f2",
+			"bonus": { "reinforce_flat": 10 },
+			"bonus_desc": "증원 게이트마다 +{reinforce_flat}명"
+		},
+		"elite": {
+			"name": "정예",
+			"color": "#f0c232",
+			"bonus": { "attack_bonus": 0.3 },
+			"bonus_desc": "공격력 +{attack_bonus_pct}%"
+		},
+		"fire": {
+			"name": "화공",
+			"color": "#f28a26",
+			"bonus": { "dot_mult": 2 },
+			"bonus_desc": "지속 피해 {dot_mult}배"
+		}
+	},
+	"list": {
+		"conscription": {
+			"name": "징병",
+			"family": "mass",
+			"reinforce_bonus": 0.5,
+			"desc": "증원 게이트 효과 +{reinforce_bonus_pct}%"
+		},
+		"volunteers": {
+			"name": "의병",
+			"family": "mass",
+			"section_start_add": 10,
+			"desc": "구간 시작 시 +{section_start_add}명"
+		},
+		"wide_formation": {
+			"name": "횡진",
+			"family": "mass",
+			"melee_limit_bonus": 8,
+			"desc": "근접 동시 교전 수 +{melee_limit_bonus}"
+		},
+		"picked_troops": {
+			"name": "정병",
+			"family": "elite",
+			"loss_ratio": 0.4,
+			"attack_mult": 2,
+			"desc": "즉시 병력 -{loss_ratio_pct}%, 공격력 ×{attack_mult}"
+		},
+		"iron_armor": {
+			"name": "철갑",
+			"family": "elite",
+			"damage_taken_reduction": 0.25,
+			"desc": "받는 피해 -{damage_taken_reduction_pct}%"
+		},
+		"vanguard": {
+			"name": "선봉",
+			"family": "elite",
+			"contact_damage_per_soldier": 4,
+			"charge_mult": 2,
+			"desc": "첫 접촉 피해 추가(병력 수 × {contact_damage_per_soldier})\n기병은 돌격 피해 ×{charge_mult}"
+		},
+		"fire_arrows": {
+			"name": "불화살",
+			"family": "fire",
+			"dot_ratio": 0.5,
+			"dot_duration": 3,
+			"volley_interval": 5,
+			"volley_damage_per_soldier": 1,
+			"volley_range": 12,
+			"desc": "원거리 피해의 {dot_ratio_pct}%를 {dot_duration}초간 지속 피해로 추가\n궁병이 아니면 {volley_interval}초마다 병력 수 × {volley_damage_per_soldier}의 일제 사격"
+		},
+		"fire_attack": {
+			"name": "화계",
+			"family": "fire",
+			"health_ratio": 0.15,
+			"desc": "적 무리와 교전 시작 시 그 무리 체력의 {health_ratio_pct}% 피해"
+		},
+		"chain": {
+			"name": "연환",
+			"family": "fire",
+			"damage_taken_bonus": 0.25,
+			"desc": "지속 피해 중인 적이 받는 피해 +{damage_taken_bonus_pct}%"
+		}
+	}
+}

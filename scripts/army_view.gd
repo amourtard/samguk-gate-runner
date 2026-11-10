@@ -1,3 +1,4 @@
+class_name ArmyView
 extends MultiMeshInstance3D
 ## army.gd의 병력 수를 MultiMesh로 그린다. 계산 결과를 그리기만 한다.
 
@@ -26,6 +27,16 @@ func setup(army: Army, units: Dictionary, tuning: Dictionary, color: Color) -> v
 
 	_army.changed.connect(_rebuild)
 	_rebuild()
+
+
+## 병력 수에 따른 원형 대형의 반지름. 앞줄 위치 계산에 쓴다.
+static func formation_radius(count: int, spacing: float) -> float:
+	return spacing * sqrt(maxi(count, 1))
+
+
+## 계열 효과 같은 상태 변화로 병사 색을 바꾼다.
+func set_color(color: Color) -> void:
+	(material_override as StandardMaterial3D).albedo_color = color
 
 
 func _rebuild() -> void:
