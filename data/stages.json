@@ -1,0 +1,20 @@
+{
+	"sections": 3,
+	"gate_pairs_per_section": { "min": 2, "max": 3 },
+	"section_layout": {
+		"gates": [15, 75, 100],
+		"enemies": [45, 125]
+	},
+	"enemy_group_weights": [0.12, 0.14, 0.16, 0.17, 0.19, 0.22],
+	"boss": {
+		"unit": "boss",
+		"distance_after_last_section": 30
+	},
+	"list": [
+		{ "id": "1-1", "composition": { "infantry": 1.0 }, "enemy_total": 60, "bridge_section": 0, "boss_health": 400 },
+		{ "id": "1-2", "composition": { "infantry": 0.7, "archer": 0.3 }, "enemy_total": 90, "bridge_section": 0, "boss_health": 600 },
+		{ "id": "1-3", "composition": { "archer": 0.6, "infantry": 0.4 }, "enemy_total": 120, "bridge_section": 2, "boss_health": 800 },
+		{ "id": "1-4", "composition": { "cavalry": 0.5, "infantry": 0.5 }, "enemy_total": 160, "bridge_section": 0, "boss_health": 1100 },
+		{ "id": "1-5", "composition": { "infantry": 0.4, "archer": 0.3, "cavalry": 0.3 }, "enemy_total": 220, "bridge_section": 3, "boss_health": 1500 }
+	]
+}

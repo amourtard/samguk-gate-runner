@@ -17,6 +17,7 @@ var total_health: float
 var attack_mult := 1.0
 var attack_speed_mult := 1.0
 var damage_taken_mult := 1.0
+var range_mult := 1.0
 
 
 func _init(p_unit_type: String, p_unit_health: float, p_count: int) -> void:
@@ -59,6 +60,22 @@ func take_damage(amount: float) -> float:
 		count = new_count
 		changed.emit()
 	return absorbed / damage_taken_mult
+
+
+## 받는 피해 보정과 무관하게 병사를 정해진 수만큼 잃는다(보스 공격처럼 명수로 정해진 손실).
+## 다친 병사의 체력은 그대로 둔다.
+func lose_soldiers(amount: int) -> void:
+	if amount <= 0 or count <= 0:
+		return
+	total_health = maxf(total_health - amount * unit_health, 0.0)
+	var new_count := 0
+	if total_health > HEALTH_EPSILON:
+		new_count = ceili(total_health / unit_health - HEALTH_EPSILON)
+	else:
+		total_health = 0.0
+	if new_count != count:
+		count = new_count
+		changed.emit()
 
 
 ## 초당 피해에 곱할 공격 보정 합계.

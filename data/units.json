@@ -28,5 +28,16 @@
 		"charge_damage": 8,
 		"strong_against": "archer",
 		"mesh": { "shape": "box", "size": [0.22, 0.34, 0.5] }
+	},
+	"boss": {
+		"name": "장각",
+		"hud_color": "#9c2a2a",
+		"show_health": true,
+		"health": 1,
+		"dps": 0,
+		"range": 0,
+		"charge_damage": 0,
+		"strong_against": "",
+		"mesh": { "shape": "box", "size": [2.4, 3.2, 2.4] }
 	}
 }

@@ -1,0 +1,137 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/hero_select.gd" id="1_hero_select"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_card"]
+content_margin_left = 36.0
+content_margin_top = 24.0
+content_margin_right = 36.0
+content_margin_bottom = 24.0
+bg_color = Color(0.14, 0.15, 0.2, 1)
+border_width_left = 6
+border_width_top = 6
+border_width_right = 6
+border_width_bottom = 6
+border_color = Color(0.3, 0.32, 0.4, 1)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_card_selected"]
+content_margin_left = 36.0
+content_margin_top = 24.0
+content_margin_right = 36.0
+content_margin_bottom = 24.0
+bg_color = Color(0.2, 0.26, 0.42, 1)
+border_width_left = 10
+border_width_top = 10
+border_width_right = 10
+border_width_bottom = 10
+border_color = Color(0.95, 0.78, 0.25, 1)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_disabled"]
+content_margin_left = 36.0
+content_margin_top = 24.0
+content_margin_right = 36.0
+content_margin_bottom = 24.0
+bg_color = Color(0.1, 0.1, 0.12, 1)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+
+[node name="HeroSelect" type="CanvasLayer"]
+layer = 5
+script = ExtResource("1_hero_select")
+
+[node name="Back" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.07, 0.08, 0.11, 1)
+
+[node name="Margin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 60
+theme_override_constants/margin_top = 140
+theme_override_constants/margin_right = 60
+theme_override_constants/margin_bottom = 120
+
+[node name="Box" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 40
+
+[node name="Title" type="Label" parent="Margin/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 88
+text = "장수 선택"
+horizontal_alignment = 1
+
+[node name="HeroList" type="VBoxContainer" parent="Margin/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 30
+
+[node name="HeroTemplate" type="Button" parent="Margin/Box/HeroList"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+theme_override_font_sizes/font_size = 42
+theme_override_styles/normal = SubResource("StyleBox_card")
+theme_override_styles/hover = SubResource("StyleBox_card")
+theme_override_styles/pressed = SubResource("StyleBox_card_selected")
+theme_override_styles/hover_pressed = SubResource("StyleBox_card_selected")
+theme_override_styles/focus = SubResource("StyleBox_card")
+toggle_mode = true
+text = "장수"
+autowrap_mode = 3
+
+[node name="StageTitle" type="Label" parent="Margin/Box"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 56
+text = "스테이지"
+horizontal_alignment = 1
+
+[node name="StageRow" type="HBoxContainer" parent="Margin/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="StageTemplate" type="Button" parent="Margin/Box/StageRow"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(170, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_styles/normal = SubResource("StyleBox_card")
+theme_override_styles/hover = SubResource("StyleBox_card")
+theme_override_styles/pressed = SubResource("StyleBox_card_selected")
+theme_override_styles/hover_pressed = SubResource("StyleBox_card_selected")
+theme_override_styles/disabled = SubResource("StyleBox_disabled")
+theme_override_styles/focus = SubResource("StyleBox_card")
+toggle_mode = true
+text = "1-1"
+
+[node name="Spacer" type="Control" parent="Margin/Box"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StartButton" type="Button" parent="Margin/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 170)
+layout_mode = 2
+theme_override_font_sizes/font_size = 72
+text = "출전"

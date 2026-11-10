@@ -105,6 +105,11 @@ func tick(dt: float, gap: float) -> Dictionary:
 	return events
 
 
+## 장수 기술처럼 상성 없이 정해진 피해를 앞줄부터 넣는다.
+func deal_direct_damage(amount: float) -> void:
+	_deal_to_enemies(amount, false, 1.0)
+
+
 func is_enemy_defeated() -> bool:
 	for pool in enemies:
 		if pool.is_alive():
@@ -193,11 +198,11 @@ func _dps(army: Army) -> float:
 
 
 func _range(army: Army) -> float:
-	return float(_units[army.unit_type]["range"])
+	return float(_units[army.unit_type]["range"]) * army.range_mult
 
 
 ## 공격 병종이 유리하면 상성 배율, 아니면 1배
 func _matchup(attacker_type: String, defender_type: String) -> float:
-	if _units[attacker_type]["strong_against"] == defender_type:
+	if _units[attacker_type].get("strong_against", "") == defender_type:
 		return _advantage_mult
 	return 1.0

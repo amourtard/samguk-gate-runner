@@ -1,10 +1,10 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://scripts/end_screen.gd" id="1_end"]
+[ext_resource type="Script" path="res://scripts/result_screen.gd" id="1_result"]
 
-[node name="EndScreen" type="CanvasLayer"]
+[node name="ResultScreen" type="CanvasLayer"]
 layer = 10
-script = ExtResource("1_end")
+script = ExtResource("1_result")
 
 [node name="Dim" type="ColorRect" parent="."]
 anchors_preset = 15
@@ -12,7 +12,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0, 0, 0, 0.7)
+color = Color(0, 0, 0, 0.75)
 
 [node name="Center" type="CenterContainer" parent="."]
 anchors_preset = 15
@@ -22,14 +22,15 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Box" type="VBoxContainer" parent="Center"]
+custom_minimum_size = Vector2(800, 0)
 layout_mode = 2
-theme_override_constants/separation = 60
+theme_override_constants/separation = 40
 
 [node name="Title" type="Label" parent="Center/Box"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 140
-text = "패배"
+text = "돌파"
 horizontal_alignment = 1
 
 [node name="Detail" type="Label" parent="Center/Box"]
@@ -37,10 +38,25 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 44
 horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="NextButton" type="Button" parent="Center/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+theme_override_font_sizes/font_size = 60
+text = "다음 스테이지"
 
 [node name="RetryButton" type="Button" parent="Center/Box"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(480, 140)
+custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
-theme_override_font_sizes/font_size = 64
-text = "다시 하기"
+theme_override_font_sizes/font_size = 60
+text = "다시 도전"
+
+[node name="HeroesButton" type="Button" parent="Center/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+theme_override_font_sizes/font_size = 60
+text = "장수 선택"

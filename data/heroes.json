@@ -1,0 +1,26 @@
+{
+	"order": ["guan_yu", "zhang_fei", "zhuge_liang"],
+	"list": {
+		"guan_yu": {
+			"name": "관우",
+			"unit": "cavalry",
+			"count": 12,
+			"skill": { "type": "strike", "interval": 15, "damage_per_soldier": 5, "target_range": 20 },
+			"skill_desc": "{interval}초마다 전방 적 무리에 병력 수 × {damage_per_soldier} 피해"
+		},
+		"zhang_fei": {
+			"name": "장비",
+			"unit": "infantry",
+			"count": 16,
+			"skill": { "type": "guard", "interval": 15, "duration": 3, "damage_taken_reduction": 0.5 },
+			"skill_desc": "{interval}초마다 {duration}초간 받는 피해 -{damage_taken_reduction_pct}%"
+		},
+		"zhuge_liang": {
+			"name": "제갈량",
+			"unit": "archer",
+			"count": 12,
+			"skill": { "type": "focus", "interval": 18, "duration": 4, "range_bonus": 0.5, "attack_speed_bonus": 0.5 },
+			"skill_desc": "{interval}초마다 {duration}초간 사거리와 공격속도 +{range_bonus_pct}%"
+		}
+	}
+}

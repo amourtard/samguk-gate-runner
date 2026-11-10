@@ -2,7 +2,6 @@
 	"advance_speed": 8,
 	"lateral_max_speed": 12,
 	"section_length": 150,
-	"sections_per_stage": 3,
 	"combat_advance_ratio": 0.2,
 	"gate_slowdown": {
 		"enabled": true,
@@ -16,7 +15,7 @@
 		"tick": 0.1,
 		"contact_distance": 1,
 		"advantage_multiplier": 1.5,
-		"front_order": ["infantry", "cavalry", "archer"]
+		"front_order": ["infantry", "cavalry", "archer", "boss"]
 	},
 	"soldier_display_limit": 200,
 	"number_popup": {
@@ -47,6 +46,21 @@
 	},
 	"screen_shake_duration": 0.08,
 	"screen_shake_strength": 0.3,
+	"boss": {
+		"pattern_interval": 5,
+		"warn_time": 1.2,
+		"zones": 3,
+		"hit_loss_ratio": 0.25,
+		"contact_loss_per_second": 2,
+		"activate_distance": 40,
+		"warn_length": 40,
+		"warn_lift": 0.03,
+		"warn_alpha": 0.45,
+		"warn_color": "#ff2020",
+		"label_height": 4.2,
+		"label_font_size": 160,
+		"label_pixel_size": 0.01
+	},
 	"arrow_view": {
 		"interval": 0.3,
 		"per_volley": 6,
@@ -65,6 +79,7 @@
 		"visible_length": 220,
 		"behind_length": 30,
 		"surface_lift": 0.01,
+		"overlay_lift": 0.02,
 		"ground_size": 600,
 		"marker_spacing": 6,
 		"marker_size": [0.3, 0.3, 1.2]
@@ -86,27 +101,13 @@
 		"enemy": "#d83a3a",
 		"road": "#b9a27a",
 		"ground": "#5e7f4a",
-		"marker": "#eee6d2"
+		"marker": "#eee6d2",
+		"bridge": "#6b4a2b",
+		"water": "#3c6e9e",
+		"boss": "#5a1a1a",
+		"hero_skill": "#ffd24a"
 	},
 	"debug": {
-		"start_unit": "infantry",
-		"start_count": 16,
-		"count_step": 10,
-		"enemy_groups": [
-			{ "distance": 50, "units": { "infantry": 10 } },
-			{ "distance": 115, "units": { "infantry": 12, "archer": 6 } },
-			{ "distance": 205, "units": { "archer": 12, "infantry": 10 } },
-			{ "distance": 270, "units": { "infantry": 14, "archer": 8 } },
-			{ "distance": 355, "units": { "cavalry": 12, "infantry": 12 } },
-			{ "distance": 420, "units": { "infantry": 16, "cavalry": 10, "archer": 10 } }
-		],
-		"gate_pairs": [
-			{ "distance": 20, "left": { "type": "reinforce", "option": "add_20" }, "right": { "type": "switch", "unit": "archer" } },
-			{ "distance": 80, "left": { "type": "gamble" }, "right": { "type": "reinforce", "option": "add_10" } },
-			{ "distance": 170, "left": { "type": "reinforce", "option": "mult_2" }, "right": { "type": "switch", "unit": "cavalry" } },
-			{ "distance": 235, "left": { "type": "empower", "option": "attack_speed" }, "right": { "type": "trap" } },
-			{ "distance": 320, "left": { "type": "empower", "option": "armor" }, "right": { "type": "reinforce", "option": "add_30" } },
-			{ "distance": 385, "left": { "type": "switch", "unit": "infantry" }, "right": { "type": "reinforce", "option": "add_20" } }
-		]
+		"count_step": 10
 	}
 }

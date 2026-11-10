@@ -172,11 +172,11 @@ func family_name(family: String) -> String:
 
 
 func description(id: String) -> String:
-	return _fill(_list[id]["desc"], _list[id])
+	return fill_template(_list[id]["desc"], _list[id])
 
 
 func family_bonus_description(family: String) -> String:
-	return _fill(_families[family]["bonus_desc"], _families[family]["bonus"])
+	return fill_template(_families[family]["bonus_desc"], _families[family]["bonus"])
 
 
 func _dot_mult() -> float:
@@ -191,7 +191,7 @@ func _active_bonus() -> Dictionary:
 
 
 ## 설명 문구의 {키}와 {키_pct}를 데이터 값으로 채운다.
-static func _fill(template: String, values: Dictionary) -> String:
+static func fill_template(template: String, values: Dictionary) -> String:
 	var params := {}
 	for key in values:
 		var value: Variant = values[key]

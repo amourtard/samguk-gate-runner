@@ -39,7 +39,7 @@ func set_count_anchor(screen_pos: Vector2) -> void:
 func set_next_enemy(pools: Array[Army]) -> void:
 	var signature := ""
 	for pool in pools:
-		signature += "%s:%d," % [pool.unit_type, pool.count]
+		signature += "%s:%d:%d," % [pool.unit_type, pool.count, ceili(pool.total_health)]
 	if signature == _strip_signature:
 		return
 	_strip_signature = signature
@@ -63,7 +63,11 @@ func set_next_enemy(pools: Array[Army]) -> void:
 		segment.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		segment.size_flags_stretch_ratio = float(pool.count)
 		var text := Label.new()
-		text.text = "%s %d" % [unit["name"], pool.count]
+		# 보스처럼 체력으로 보여주는 항목
+		if unit.get("show_health", false):
+			text.text = "%s %d/%d" % [unit["name"], ceili(pool.total_health), ceili(pool.unit_health)]
+		else:
+			text.text = "%s %d" % [unit["name"], pool.count]
 		text.add_theme_font_size_override("font_size", _strip_empty.get_theme_font_size("font_size"))
 		text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
