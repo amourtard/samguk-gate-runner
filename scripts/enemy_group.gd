@@ -13,7 +13,7 @@ var _pool_offsets := {}
 
 
 ## health_override가 0보다 크면 병사 1명의 체력을 그 값으로 바꾼다(보스용).
-func setup(composition: Dictionary, units: Dictionary, tuning: Dictionary, color: Color, health_override := 0.0) -> void:
+func setup(composition: Dictionary, units: Dictionary, tuning: Dictionary, visual: Dictionary, color: Color, health_override := 0.0) -> void:
 	var spacing := float(tuning["formation"]["spacing"])
 	var depth := 0.0
 	for unit_type in tuning["combat"]["front_order"]:
@@ -24,13 +24,14 @@ func setup(composition: Dictionary, units: Dictionary, tuning: Dictionary, color
 		var pool := Army.new(unit_type, health, count)
 		pools.append(pool)
 
-		# 큰 도형(보스)은 도형 깊이의 절반을 반지름으로 본다
-		var radius := maxf(ArmyView.formation_radius(count, spacing), _mesh_half_depth(units[unit_type]["mesh"]))
+		# 큰 도형(보스)은 도형 깊이의 절반을 반지름으로 본다. 도형 데이터가 없는 일반 병종은 대형 반지름만 쓴다
+		var radius := maxf(ArmyView.formation_radius(count, spacing), _mesh_half_depth(units[unit_type].get("mesh", {})))
 		var view := ArmyView.new()
 		add_child(view)
 		view.position = Vector3(0.0, 0.0, -(depth + radius))
 		_pool_offsets[unit_type] = view.position
-		view.setup(pool, units, tuning, color)
+		# 적은 서서 기다리고, 앞줄은 처음 계산 위치에 고정한다
+		view.setup(pool, units, tuning, visual, color, 1.0, float(visual["soldier"]["enemy_bob_height"]), radius)
 		depth += radius * 2.0
 
 
@@ -47,6 +48,8 @@ func total_count() -> int:
 
 
 func _mesh_half_depth(mesh_data: Dictionary) -> float:
+	if mesh_data.is_empty():
+		return 0.0
 	if mesh_data["shape"] == "box":
 		return float(mesh_data["size"][2]) / 2.0
 	return float(mesh_data.get("radius", 0.0))

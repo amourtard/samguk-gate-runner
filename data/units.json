@@ -6,8 +6,7 @@
 		"dps": 2,
 		"range": 0,
 		"charge_damage": 0,
-		"strong_against": "cavalry",
-		"mesh": { "shape": "box", "size": [0.22, 0.36, 0.22] }
+		"strong_against": "cavalry"
 	},
 	"archer": {
 		"name": "궁병",
@@ -16,8 +15,7 @@
 		"dps": 3,
 		"range": 12,
 		"charge_damage": 0,
-		"strong_against": "infantry",
-		"mesh": { "shape": "cylinder", "radius": 0.07, "height": 0.42, "radial_segments": 8 }
+		"strong_against": "infantry"
 	},
 	"cavalry": {
 		"name": "기병",
@@ -26,8 +24,7 @@
 		"dps": 3,
 		"range": 0,
 		"charge_damage": 8,
-		"strong_against": "archer",
-		"mesh": { "shape": "box", "size": [0.22, 0.34, 0.5] }
+		"strong_against": "archer"
 	},
 	"boss": {
 		"name": "장각",

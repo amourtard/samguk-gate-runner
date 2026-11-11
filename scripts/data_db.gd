@@ -2,7 +2,7 @@ extends Node
 ## 자동 로드. data 폴더의 JSON을 읽어 제공한다.
 
 const DATA_DIR := "res://data/"
-const TABLE_NAMES: Array[String] = ["units", "gates", "strategies", "heroes", "stages", "upgrades", "tuning"]
+const TABLE_NAMES: Array[String] = ["units", "gates", "strategies", "heroes", "stages", "upgrades", "tuning", "visual"]
 
 var _tables: Dictionary = {}
 

@@ -1,67 +1,10 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
+[ext_resource type="Script" path="res://scripts/skill_gauge.gd" id="2_gauge"]
 
 [node name="Hud" type="CanvasLayer"]
 script = ExtResource("1_hud")
-
-[node name="Top" type="VBoxContainer" parent="."]
-mouse_filter = 2
-anchors_preset = 10
-anchor_right = 1.0
-offset_left = 40.0
-offset_top = 40.0
-offset_right = -40.0
-offset_bottom = 200.0
-grow_horizontal = 2
-theme_override_constants/separation = 8
-
-[node name="StripTitle" type="Label" parent="Top"]
-layout_mode = 2
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 10
-theme_override_font_sizes/font_size = 40
-text = "다음 적"
-
-[node name="StripFrame" type="Control" parent="Top"]
-mouse_filter = 2
-custom_minimum_size = Vector2(0, 90)
-layout_mode = 2
-
-[node name="StripBack" type="ColorRect" parent="Top/StripFrame"]
-mouse_filter = 2
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0, 0, 0, 0.45)
-
-[node name="EnemyStrip" type="HBoxContainer" parent="Top/StripFrame"]
-mouse_filter = 2
-unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 4
-
-[node name="StripEmpty" type="Label" parent="Top/StripFrame"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 44
-text = "남은 적 없음"
-horizontal_alignment = 1
-vertical_alignment = 1
 
 [node name="DamageRoot" type="Control" parent="."]
 unique_name_in_owner = true
@@ -81,17 +24,116 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="CountLabel" type="Label" parent="PopupRoot"]
+[node name="CountBox" type="HBoxContainer" parent="PopupRoot"]
 unique_name_in_owner = true
 layout_mode = 0
+mouse_filter = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="CountIcon" type="TextureRect" parent="PopupRoot/CountBox"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CountLabel" type="Label" parent="PopupRoot/CountBox"]
+unique_name_in_owner = true
+layout_mode = 2
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 18
-theme_override_font_sizes/font_size = 72
 text = "0"
+vertical_alignment = 1
+
+[node name="Top" type="Control" parent="."]
+mouse_filter = 2
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 240.0
+grow_horizontal = 2
+
+[node name="StageLabel" type="Label" parent="Top"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 32.0
+offset_top = 16.0
+offset_right = 700.0
+offset_bottom = 60.0
+text = "1-1   구간 1/3"
+
+[node name="StripBack" type="Panel" parent="Top"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 64.0
+offset_right = -160.0
+offset_bottom = 148.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="StripRow" type="HBoxContainer" parent="Top/StripBack"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_right = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="StripTitle" type="Label" parent="Top/StripBack/StripRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "다음 적"
+vertical_alignment = 1
+
+[node name="EnemyStrip" type="HBoxContainer" parent="Top/StripBack/StripRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="StripEmpty" type="Label" parent="Top/StripBack/StripRow"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+text = "남은 적 없음"
 horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SkillGauge" type="Control" parent="Top"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -148.0
+offset_top = 40.0
+offset_right = -32.0
+offset_bottom = 156.0
+grow_horizontal = 0
+mouse_filter = 2
+script = ExtResource("2_gauge")
+
+[node name="StrategyRow" type="HBoxContainer" parent="Top"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 32.0
+offset_top = 160.0
+offset_right = 800.0
+offset_bottom = 216.0
+mouse_filter = 2
+theme_override_constants/separation = 10
 
 [node name="StatusLabel" type="Label" parent="."]
 unique_name_in_owner = true
+visible = false
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
@@ -102,6 +144,4 @@ offset_right = -40.0
 offset_bottom = -40.0
 grow_horizontal = 2
 grow_vertical = 0
-theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 10
-theme_override_font_sizes/font_size = 36
+theme_override_font_sizes/font_size = 32

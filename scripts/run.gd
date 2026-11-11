@@ -18,6 +18,8 @@ const DEBUG_SUB_KEY := KEY_DOWN
 const DEBUG_UNIT_KEYS := {KEY_1: "infantry", KEY_2: "archer", KEY_3: "cavalry"}
 # 게이트 앞 감속 켜고 끄기 키 (켠 판과 끈 판 비교용)
 const SLOWDOWN_TOGGLE_KEY := KEY_G
+# 개발용 글자(디버그 표시) 켜고 끄기 키
+const DEBUG_OVERLAY_KEY := KEY_F3
 
 @onready var _road_view: Node3D = $RoadView
 @onready var _army_view: ArmyView = $ArmyView
@@ -25,10 +27,13 @@ const SLOWDOWN_TOGGLE_KEY := KEY_G
 @onready var _hud: Hud = $Hud
 @onready var _sfx: Sfx = $Sfx
 @onready var _arrow_view: ArrowView = $ArrowView
+@onready var _environment: Environment = ($WorldEnvironment as WorldEnvironment).environment
+@onready var _light: DirectionalLight3D = $DirectionalLight3D
 
 var army: Army
 
 var _tuning: Dictionary
+var _visual: Dictionary
 var _units: Dictionary
 var _gates: Dictionary
 var _strategy: Strategy
@@ -37,11 +42,15 @@ var _pick_log: PickLog
 var _stage_id: String
 var _army_position := Vector3.ZERO
 var _target_x := 0.0
-var _lateral_limit: float
+# 좌우 이동 범위의 최소값. 실제 범위는 도로 반폭에서 무리 표시 반폭을 뺀 값이다
+var _lateral_limit_min: float
 var _road_width: float
-var _camera_offset: Vector3
-var _camera_look_ahead: float
 var _spacing: float
+var _display_limit: int
+# 카메라는 아군 표시 대형 크기에 따라 물러나는 거리를 부드럽게 따라간다
+var _camera_distance := -1.0
+var _hero_view: HeroView
+var _skill_interval: float
 
 # 앞에서부터 차례로 상대할 적 무리(마지막이 보스)
 var _enemy_groups: Array[EnemyGroup] = []
@@ -83,6 +92,7 @@ var _focus_lit := false
 
 func _ready() -> void:
 	_tuning = DataDb.table("tuning")
+	_visual = DataDb.table("visual")
 	_units = DataDb.table("units")
 	_gates = DataDb.table("gates")
 	_strategy = Strategy.new(DataDb.table("strategies"))
@@ -97,12 +107,17 @@ func _ready() -> void:
 
 	var unit_type: String = hero["unit"]
 	army = Army.new(unit_type, float(_units[unit_type]["health"]), int(hero["count"]))
-	_army_view.setup(army, _units, _tuning, Color.html(_tuning["colors"]["ally"]))
-	_road_view.setup(_tuning)
+	_army_view.setup(army, _units, _tuning, _visual, Color.html(_tuning["colors"]["ally"]), -1.0, float(_visual["soldier"]["bob_height"]))
+	_road_view.setup(_tuning, _visual)
+	_hero_view = HeroView.new()
+	add_child(_hero_view)
+	_hero_view.setup(GameState.hero_id, unit_type, _visual)
+	_skill_interval = float(hero["skill"]["interval"])
 
-	_lateral_limit = float(_tuning["road"]["lateral_limit"])
+	_lateral_limit_min = float(_tuning["road"]["lateral_limit_min"])
 	_road_width = float(_tuning["road"]["width"])
 	_spacing = float(_tuning["formation"]["spacing"])
+	_display_limit = int(_tuning["soldier_display_limit"])
 	_tick_interval = float(_tuning["combat"]["tick"])
 	_gate_slowdown_enabled = bool(_tuning["gate_slowdown"]["enabled"])
 	_boss_pattern = BossPattern.new(_tuning)
@@ -116,8 +131,11 @@ func _ready() -> void:
 	_spawn_gate_pairs(plan["gate_pairs"])
 	if not (plan["bridge"] as Dictionary).is_empty():
 		_add_bridge(float(plan["bridge"]["start"]), float(plan["bridge"]["end"]))
+	var field := FieldView.new()
+	add_child(field)
+	field.setup(_environment, _light, float(plan["boss"]["distance"]), _road_width, _visual)
 
-	_hud.setup(army, _units, _tuning)
+	_hud.setup(army, _units, _tuning, _visual, _hero.name)
 	_sfx.setup(_tuning)
 	_arrow_view.setup(_tuning)
 	_display_damage_mult = float(_tuning["display_damage_multiplier"])
@@ -125,14 +143,9 @@ func _ready() -> void:
 	add_child(_skill_view)
 	_skill_view.setup(_tuning)
 
-	# 아군 뒤쪽 위에서 지정 각도로 내려다본다
-	var camera_data: Dictionary = _tuning["camera"]
-	var pitch := deg_to_rad(float(camera_data["pitch_deg"]))
-	var distance := float(camera_data["distance"])
-	_camera_offset = Vector3(0.0, sin(pitch) * distance, cos(pitch) * distance)
-	_camera_look_ahead = float(camera_data["look_ahead"])
+	# 아군 뒤쪽 위에서 지정 각도로 내려다본다. 화각은 가로 기준이다
 	_camera.keep_aspect = Camera3D.KEEP_WIDTH
-	_camera.fov = float(camera_data["fov"])
+	_camera.fov = float(_visual["camera"]["fov"])
 	_update_camera()
 	_update_hud()
 
@@ -146,7 +159,7 @@ func _spawn_enemy_groups(group_list: Array) -> void:
 		add_child(group)
 		group.position = Vector3(0.0, 0.0, -float(entry["distance"]))
 		group.section = int(entry["section"])
-		group.setup(entry["units"], _units, _tuning, color)
+		group.setup(entry["units"], _units, _tuning, _visual, color)
 		_enemy_groups.append(group)
 	# 가까운 무리부터 상대한다
 	_enemy_groups.sort_custom(func(a: EnemyGroup, b: EnemyGroup) -> bool: return a.position.z > b.position.z)
@@ -158,7 +171,7 @@ func _spawn_boss(boss: Dictionary) -> void:
 	group.position = Vector3(0.0, 0.0, -float(boss["distance"]))
 	group.section = _section_count + 1
 	group.is_boss = true
-	group.setup({boss["unit"]: 1}, _units, _tuning, Color.html(_tuning["colors"]["boss"]), float(boss["health"]))
+	group.setup({boss["unit"]: 1}, _units, _tuning, _visual, Color.html(_tuning["colors"]["boss"]), float(boss["health"]))
 	_boss_view = group.get_node("BossView")
 	_boss_view.setup(_units[boss["unit"]]["name"], _tuning)
 	_enemy_groups.append(group)
@@ -169,7 +182,7 @@ func _spawn_gate_pairs(pair_list: Array) -> void:
 		var pair: GatePair = GatePairScene.instantiate()
 		add_child(pair)
 		pair.position = Vector3(0.0, 0.0, -float(entry["distance"]))
-		pair.setup(entry["left"], entry["right"], _gates, _units, _tuning)
+		pair.setup(entry["left"], entry["right"], _gates, _units, _tuning, _visual)
 		_gate_pairs.append(pair)
 
 
@@ -215,7 +228,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		# 화면 폭 대비 드래그 거리만큼 목표 위치를 옮긴다 (상대 이동)
 		var screen_width := get_viewport().get_visible_rect().size.x
 		var meters_per_width := float(_tuning["input"]["drag_meters_per_screen_width"])
-		_target_x = clampf(_target_x + event.relative.x / screen_width * meters_per_width, -_lateral_limit, _lateral_limit)
+		var limit := _lateral_limit()
+		_target_x = clampf(_target_x + event.relative.x / screen_width * meters_per_width, -limit, limit)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var step := int(_tuning["debug"]["count_step"])
 		if event.keycode == DEBUG_ADD_KEY:
@@ -227,6 +241,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			army.set_unit_type(unit_type, float(_units[unit_type]["health"]))
 		elif event.keycode == SLOWDOWN_TOGGLE_KEY:
 			_gate_slowdown_enabled = not _gate_slowdown_enabled
+		elif event.keycode == DEBUG_OVERLAY_KEY:
+			_hud.toggle_debug()
 		_update_hud()
 
 
@@ -257,8 +273,12 @@ func _process(delta: float) -> void:
 		var stop_z := _enemy_groups[0].position.z + _army_radius()
 		_army_position.z = maxf(_army_position.z, stop_z)
 
+	# 병력이 늘어 무리가 넓어지면 이동 범위가 줄어든다
+	var limit := _lateral_limit()
+	_target_x = clampf(_target_x, -limit, limit)
 	_army_position.x = move_toward(_army_position.x, _target_x, float(_tuning["lateral_max_speed"]) * delta)
 	_army_view.position = _army_position
+	_hero_view.follow(_army_position, _army_radius())
 	_update_skill_view()
 	_road_view.follow(_army_position.z)
 	_update_camera()
@@ -332,7 +352,7 @@ func _run_hero_skill(delta: float) -> void:
 		_skill_view.show_strike(_army_position - Vector3(0.0, 0.0, _army_radius()), group.global_position)
 		_show_strike_numbers(dealt, group)
 	if _hero.skill_type() == "focus":
-		_skill_view.show_pulse(_army_position)
+		_skill_view.show_pulse(_display_center())
 	_hud.show_delta("%s 기술" % _hero.name, _count_anchor(), Color.html(_tuning["colors"]["hero_skill"]))
 	print("%s 기술 발동" % _hero.name)
 
@@ -417,10 +437,14 @@ func _check_gates() -> void:
 			_sfx.play("gate")
 			var color := Color.html(_gates[spec["type"]]["color"]).lightened(float(_tuning["delta_popup"]["lighten"]))
 			_hud.show_delta(result["popup"], _count_anchor(), color)
+			pair.play_pass(_army_position.x)
 			print("게이트 %s: %s" % [_gates[spec["type"]]["name"], str(result["popup"]).replace("\n", " ")])
 			if not army.is_alive():
 				_on_defeat()
 				return
+		# 먼 게이트의 글자는 숨겨 화면 위쪽에 겹쳐 보이지 않게 한다
+		if not pair.passed:
+			pair.set_text_visible(_army_position.z - pair.position.z <= float(_visual["gate"]["text_hide_distance"]))
 		# 지나간 게이트는 화면 뒤로 충분히 멀어지면 지운다
 		if pair.passed and pair.position.z > _army_position.z + remove_behind:
 			_gate_pairs.erase(pair)
@@ -532,7 +556,7 @@ func _damage_anchor(world_pos: Vector3) -> Vector2:
 ## 지속형 기술 표시. 장비는 원형 도형, 제갈량은 병사 밝기를 효과가 켜진 동안 유지한다.
 func _update_skill_view() -> void:
 	var active := _hero.is_active()
-	_skill_view.set_guard(active and _hero.skill_type() == "guard", _army_position, _army_radius())
+	_skill_view.set_guard(active and _hero.skill_type() == "guard", _display_center(), _display_extent().y)
 	var lit := active and _hero.skill_type() == "focus"
 	if lit != _focus_lit:
 		_focus_lit = lit
@@ -548,11 +572,38 @@ func _army_radius() -> float:
 	return ArmyView.formation_radius(army.count, _spacing)
 
 
+## 아군 표시 대형의 반폭(x)과 앞뒤 반길이(y)
+func _display_extent() -> Vector2:
+	return ArmyView.display_extent(army.count, _visual, _display_limit, _road_width)
+
+
+## 좌우 이동 범위: 도로 반폭 − 무리 표시 반폭. 무리가 길 밖으로 나가지 않게 하되 최소값은 보장한다
+func _lateral_limit() -> float:
+	return maxf(_road_width / 2.0 - _display_extent().x, _lateral_limit_min)
+
+
+## 아군 표시 대형의 중심. 앞줄을 계산 위치에 맞추느라 계산 중심보다 조금 뒤에 있다.
+func _display_center() -> Vector3:
+	return _army_position + Vector3(0.0, 0.0, maxf(_display_extent().y - _army_radius(), 0.0))
+
+
 func _update_camera() -> void:
-	# 좌우는 따라가지 않고 전진 방향만 따라가 도로가 화면 중앙에 머물게 한다
-	var target := Vector3(0.0, 0.0, _army_position.z - _camera_look_ahead)
-	_camera.position = target + _camera_offset
-	_camera.look_at(target)
+	# 좌우는 따라가지 않고 전진 방향만 따라가 도로가 화면 중앙에 머물게 한다.
+	# 아군 무리가 화면 높이의 정해진 위치(아래에서 3분의 1 근처)에 오도록 내려다보는 각을 더한다
+	var data: Dictionary = _visual["camera"]
+	var pitch := deg_to_rad(float(data["pitch_deg"]))
+	var view_size := get_viewport().get_visible_rect().size
+	var half_vfov := atan(tan(deg_to_rad(_camera.fov) / 2.0) * view_size.y / view_size.x)
+	var depression := pitch + atan((float(data["army_screen_y"]) - 0.5) * 2.0 * tan(half_vfov))
+	var target_distance := float(data["distance_base"]) + float(data["distance_per_radius"]) * _display_extent().y
+	if _camera_distance < 0.0:
+		_camera_distance = target_distance
+	else:
+		var weight := 1.0 - exp(-float(data["follow_rate"]) * get_process_delta_time())
+		_camera_distance = lerpf(_camera_distance, target_distance, weight)
+	var anchor := Vector3(0.0, 0.0, _display_center().z)
+	_camera.position = anchor + Vector3(0.0, sin(depression), cos(depression)) * _camera_distance
+	_camera.rotation = Vector3(-pitch, 0.0, 0.0)
 	# 근접 접촉과 보스 공격 순간 짧게 흔든다
 	if _shake_time > 0.0:
 		_shake_time -= get_process_delta_time()
@@ -566,6 +617,16 @@ func _update_hud() -> void:
 	if not _enemy_groups.is_empty():
 		pools = _enemy_groups[0].pools
 	_hud.set_next_enemy(pools)
+	var stage_text := "%s   %s" % [_stage_id, "보스전" if _section > _section_count else "구간 %d/%d" % [mini(_section, _section_count), _section_count]]
+	if _section == _bridge_section:
+		stage_text += "   좁은 다리"
+	_hud.set_stage_text(stage_text)
+	_hud.set_skill(1.0 - _hero.time_left() / _skill_interval, _hero.is_active())
+	var owned: Array[Dictionary] = []
+	for id in _strategy.owned:
+		var family := _strategy.family_of(id)
+		owned.append({"family": family, "color": _strategy.family_color(family)})
+	_hud.set_strategies(owned)
 	var section_text := "보스전" if _section > _section_count else "구간 %d/%d" % [_section, _section_count]
 	if _section == _bridge_section:
 		section_text += " (좁은 다리)"
@@ -582,7 +643,7 @@ func _owned_text() -> String:
 	return ", ".join(names) if not names.is_empty() else "없음"
 
 
-## 무리 머리 위의 화면 좌표
+## 무리 머리 위의 화면 좌표. 표시 대형 중심 위, 병사 키보다 조금 높은 곳이다
 func _count_anchor() -> Vector2:
-	var head := _army_position + Vector3.UP * float(_tuning["hud"]["count_label_height"])
-	return _camera.unproject_position(head)
+	var height := ModelBuilder.height_of(_army_view.multimesh.mesh) + float(_visual["hud"]["count_height"])
+	return _camera.unproject_position(_display_center() + Vector3.UP * height)

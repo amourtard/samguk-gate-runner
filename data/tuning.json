@@ -27,9 +27,6 @@
 		"rise": 160,
 		"lighten": 0.4
 	},
-	"hud": {
-		"count_label_height": 1.2
-	},
 	"display_damage_multiplier": 100,
 	"damage_number": {
 		"interval": 0.5,
@@ -102,7 +99,7 @@
 	},
 	"road": {
 		"width": 10,
-		"lateral_limit": 4,
+		"lateral_limit_min": 2,
 		"visible_length": 220,
 		"behind_length": 30,
 		"surface_lift": 0.01,
@@ -110,12 +107,6 @@
 		"ground_size": 600,
 		"marker_spacing": 6,
 		"marker_size": [0.3, 0.3, 1.2]
-	},
-	"camera": {
-		"pitch_deg": 50,
-		"distance": 20,
-		"fov": 50,
-		"look_ahead": 4
 	},
 	"input": {
 		"drag_meters_per_screen_width": 10
@@ -126,9 +117,6 @@
 	"colors": {
 		"ally": "#3a6fe0",
 		"enemy": "#d83a3a",
-		"road": "#b9a27a",
-		"ground": "#5e7f4a",
-		"marker": "#eee6d2",
 		"bridge": "#6b4a2b",
 		"water": "#3c6e9e",
 		"boss": "#5a1a1a",
