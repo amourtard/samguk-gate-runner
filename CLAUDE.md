@@ -12,9 +12,9 @@
 
 ## 기술 기준
 
-- Godot 4.x 안정 버전, GDScript, Mobile 렌더러
+- Godot 4.x 안정 버전, GDScript, Compatibility 렌더러(웹 내보내기용)
 - 3D 쿼터뷰, 세로 화면 1080×1920
-- 병사는 MultiMeshInstance3D와 기본 도형으로만 표현한다
+- 병사는 MultiMeshInstance3D로 그린다. 모델은 기본 도형을 조합한 저폴리 메시이고, 움직임은 위치와 크기 변화로만 표현한다(뼈대 애니메이션 없음)
 - Godot 4 문법만 쓴다. 3.x 문법(`KinematicBody`, `yield`, `export var` 등)을 쓰지 않는다
 - API가 확실하지 않으면 사용 중인 Godot 버전의 공식 문서를 확인한다
 
@@ -24,14 +24,15 @@
 scenes/      씬 파일 (.tscn)
 scenes/ui/   화면 UI
 scripts/     GDScript
-data/        수치 JSON (units, gates, strategies, heroes, stages, upgrades, tuning)
+data/        수치 JSON (units, gates, strategies, heroes, stages, upgrades, tuning)와 표현 값 visual.json
 audio/       효과음
+assets/      글꼴(fonts), 아이콘(icons), 셰이더(shaders)
 docs/        기획서와 명세
 ```
 
 ## 코드 규칙
 
-- 수치는 반드시 `data/` 폴더의 JSON에 둔다. 코드에 숫자를 직접 쓰지 않는다.
+- 수치는 반드시 `data/` 폴더의 JSON에 둔다. 코드에 숫자를 직접 쓰지 않는다. 색, 크기, 글자 크기 같은 표현 값은 `data/visual.json`과 Theme 리소스에 둔다.
 - `scripts/army.gd`와 `scripts/combat.gd`는 노드와 렌더링에 의존하지 않는 순수 계산으로 유지한다.
 - 화면 표시는 계산 결과를 그리기만 한다. 뷰 스크립트에서 전투 결과를 바꾸지 않는다.
 - 변수와 함수 이름은 영어, 주석은 한국어로 쓴다.
@@ -57,6 +58,7 @@ docs 폴더의 문서가 이 프로젝트의 원본이다.
 - `알파_백로그.md`: 프로토타입 통과 후에 할 일. 지금은 구현하지 않는다
 - `작업지시.md`: 사람이 넣어주는 작업 지시를 날짜별로 누적 보관
 - `알려진_문제.md`: 발견했지만 아직 고치지 않은 문제
+- `에셋_출처.md`: 외부 에셋의 출처, 라이선스, 받은 날짜
 
 규칙
 
@@ -75,7 +77,7 @@ docs 폴더의 문서가 이 프로젝트의 원본이다.
 
 요청하지 않는 한 아래는 추가하지 않는다.
 
-- 3D 모델, 텍스처, 애니메이션, 파티클 연출, 배경음
+- 단계 V 범위를 넘는 3D 모델, 텍스처, 파티클 연출. 뼈대 애니메이션, 배경음
 - 장수 수집, 조각, 등급, 장비
 - 광고, 결제, 스토어 등록
 - 튜토리얼, 스토리, 설정 화면, 다국어
