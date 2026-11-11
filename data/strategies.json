@@ -1,5 +1,6 @@
 {
 	"offer_count": 3,
+	"picks_per_run": 3,
 	"family_bonus_count": 2,
 	"families": {
 		"mass": {

@@ -1,9 +1,9 @@
 extends Node3D
 ## 한 판의 진행. 전진, 좌우 드래그 이동, 카메라 추종, 스테이지 배치, 교전 진행,
-## 구간이 끝날 때의 책략 선택, 장수 기술, 보스전, 선택 기록을 맡는다.
+## 출전 직전의 책략 선택, 장수 기술, 보스전, 선택 기록을 맡는다.
 ## 전투 결과는 Combat, BossPattern, HeroSkill이 계산하고, 여기서는 위치와 흐름만 다룬다.
 
-## 판이 끝나면 결과를 알린다: cleared, count, hero, strategies
+## 판이 끝나면 결과를 알린다: cleared, count, unit_type, hero, strategies, section_text, strategy_items
 signal finished(result: Dictionary)
 
 const EnemyGroupScene := preload("res://scenes/enemy_group.tscn")
@@ -50,6 +50,8 @@ var _display_limit: int
 # 카메라는 아군 표시 대형 크기에 따라 물러나는 거리를 부드럽게 따라간다
 var _camera_distance := -1.0
 var _hero_view: HeroView
+# 지금 표시 대형의 최대 폭 비율. 보스 구간에 들어가면 정해진 시간에 걸쳐 좁힌다
+var _width_ratio: float
 var _skill_interval: float
 
 # 앞에서부터 차례로 상대할 적 무리(마지막이 보스)
@@ -63,19 +65,25 @@ var _bridge_section := 0
 # 보스 패턴. 마지막 책략을 고른 뒤 보스에 가까워지면 움직인다
 var _boss_pattern: BossPattern
 var _boss_view: BossView
+var _boss_group: EnemyGroup
+# 보스 모델 높이. 체력 막대를 머리 위에 붙일 때 쓴다
+var _boss_height := 0.0
 
 # 아직 지나지 않았거나 화면에 남아 있는 게이트 쌍
 var _gate_pairs: Array[GatePair] = []
 var _gate_slowdown_enabled: bool
 var _rng := RandomNumberGenerator.new()
-# 함정 게이트로 모은 금화. 판 종료 시 지급은 단계 6에서 붙인다
+# 함정 게이트로 모은 금화. 판이 끝나면 결과와 함께 넘겨 지급한다
 var _bonus_gold := 0
 
-# 지금 달리는 구간(1부터). 구간 끝에 닿으면 책략을 고른다. 마지막 구간 뒤는 보스전이다
+# 지금 달리는 구간(1부터). 마지막 구간 뒤는 보스전이다
 var _section := 1
 var _section_count: int
 var _section_length: float
+# 출전 직전 책략을 고르는 동안은 달리지 않는다
 var _choosing := false
+var _pick_number := 0
+var _pick_total := 0
 
 # 화면 흔들림 남은 시간
 var _shake_time := 0.0
@@ -87,6 +95,10 @@ var _display_damage_mult: float
 
 # 장수 기술 표시
 var _skill_view: HeroSkillView
+# 안내 띠를 띄운 마지막 구간
+var _announced_section := 0
+# 근접 충돌 지점 번쩍임
+var _clash_view: ClashView
 var _focus_lit := false
 
 
@@ -106,7 +118,9 @@ func _ready() -> void:
 	_pick_log = PickLog.new(_stage_id, GameState.hero_id)
 
 	var unit_type: String = hero["unit"]
-	army = Army.new(unit_type, float(_units[unit_type]["health"]), int(hero["count"]))
+	# 영구 강화: 병영은 시작 병력을, 무기고는 공격력을 올린다
+	army = Army.new(unit_type, float(_units[unit_type]["health"]), int(hero["count"]) + GameState.start_count_bonus())
+	army.attack_mult *= GameState.attack_mult()
 	_army_view.setup(army, _units, _tuning, _visual, Color.html(_tuning["colors"]["ally"]), -1.0, float(_visual["soldier"]["bob_height"]))
 	_road_view.setup(_tuning, _visual)
 	_hero_view = HeroView.new()
@@ -117,6 +131,7 @@ func _ready() -> void:
 	_lateral_limit_min = float(_tuning["road"]["lateral_limit_min"])
 	_road_width = float(_tuning["road"]["width"])
 	_spacing = float(_tuning["formation"]["spacing"])
+	_width_ratio = float(_tuning["formation_max_width_ratio"])
 	_display_limit = int(_tuning["soldier_display_limit"])
 	_tick_interval = float(_tuning["combat"]["tick"])
 	_gate_slowdown_enabled = bool(_tuning["gate_slowdown"]["enabled"])
@@ -133,21 +148,32 @@ func _ready() -> void:
 		_add_bridge(float(plan["bridge"]["start"]), float(plan["bridge"]["end"]))
 	var field := FieldView.new()
 	add_child(field)
-	field.setup(_environment, _light, float(plan["boss"]["distance"]), _road_width, _visual)
+	# 다리 구간 양옆은 물이라 길가 소품을 두지 않는다
+	var clear_ranges: Array[Vector2] = []
+	if not (plan["bridge"] as Dictionary).is_empty():
+		var margin := float(_visual["bridge"]["bank"])
+		clear_ranges.append(Vector2(float(plan["bridge"]["start"]) - margin, float(plan["bridge"]["end"]) + margin))
+	field.setup(_environment, _light, float(plan["boss"]["distance"]), _road_width, _visual, clear_ranges)
 
 	_hud.setup(army, _units, _tuning, _visual, _hero.name)
 	_sfx.setup(_tuning)
-	_arrow_view.setup(_tuning)
+	_arrow_view.setup(_tuning, _visual)
 	_display_damage_mult = float(_tuning["display_damage_multiplier"])
 	_skill_view = HeroSkillView.new()
 	add_child(_skill_view)
-	_skill_view.setup(_tuning)
+	_skill_view.setup(_tuning, _visual)
+	_clash_view = ClashView.new()
+	add_child(_clash_view)
+	_clash_view.setup(_visual)
 
 	# 아군 뒤쪽 위에서 지정 각도로 내려다본다. 화각은 가로 기준이다
 	_camera.keep_aspect = Camera3D.KEEP_WIDTH
 	_camera.fov = float(_visual["camera"]["fov"])
 	_update_camera()
 	_update_hud()
+	# 달리기 전에 책략을 정해진 횟수만큼 고른다
+	_pick_total = int(DataDb.table("strategies")["picks_per_run"])
+	_open_strategy_choice()
 
 
 # --- 배치 ---
@@ -173,7 +199,9 @@ func _spawn_boss(boss: Dictionary) -> void:
 	group.is_boss = true
 	group.setup({boss["unit"]: 1}, _units, _tuning, _visual, Color.html(_tuning["colors"]["boss"]), float(boss["health"]))
 	_boss_view = group.get_node("BossView")
-	_boss_view.setup(_units[boss["unit"]]["name"], _tuning)
+	_boss_view.setup(_tuning, _visual)
+	_boss_group = group
+	_boss_height = ModelBuilder.height_of(ModelBuilder.build(_visual["models"][boss["unit"]])) * ArmyView.model_scale(boss["unit"], _visual)
 	_enemy_groups.append(group)
 
 
@@ -182,41 +210,16 @@ func _spawn_gate_pairs(pair_list: Array) -> void:
 		var pair: GatePair = GatePairScene.instantiate()
 		add_child(pair)
 		pair.position = Vector3(0.0, 0.0, -float(entry["distance"]))
+		pair.section = int(entry["section"])
 		pair.setup(entry["left"], entry["right"], _gates, _units, _tuning, _visual)
 		_gate_pairs.append(pair)
 
 
-## 좁은 다리 구간을 표시한다. 도로 위에 다리 판을 깔고 양옆을 물로 칠한다.
+## 좁은 다리 구간을 표시한다. 나무 다리와 난간, 양옆 물을 깐다. 이름은 구간에 들어갈 때 안내 띠로 보여준다.
 func _add_bridge(start: float, end: float) -> void:
-	var road: Dictionary = _tuning["road"]
-	var length := end - start
-	var center_z := -(start + end) / 2.0
-	var lift := float(road["overlay_lift"])
-	var water_width := float(road["ground_size"]) / 2.0
-	_add_flat(Vector2(_road_width, length), Vector3(0.0, lift, center_z), Color.html(_tuning["colors"]["bridge"]))
-	for side in [-1.0, 1.0]:
-		var x: float = side * (_road_width + water_width) / 2.0
-		_add_flat(Vector2(water_width, length), Vector3(x, lift, center_z), Color.html(_tuning["colors"]["water"]))
-
-	var label := Label3D.new()
-	label.text = "좁은 다리"
-	label.font_size = int(_tuning["gate_view"]["label_font_size"])
-	label.pixel_size = float(_tuning["gate_view"]["label_pixel_size"])
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.position = Vector3(0.0, float(_tuning["gate_view"]["height"]), -start)
-	add_child(label)
-
-
-func _add_flat(size: Vector2, at: Vector3, color: Color) -> void:
-	var plane := PlaneMesh.new()
-	plane.size = size
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	var instance := MeshInstance3D.new()
-	instance.mesh = plane
-	instance.material_override = material
-	instance.position = at
-	add_child(instance)
+	var bridge := BridgeView.new()
+	add_child(bridge)
+	bridge.setup(start, end, _road_width, _visual)
 
 
 # --- 입력 ---
@@ -273,6 +276,7 @@ func _process(delta: float) -> void:
 		var stop_z := _enemy_groups[0].position.z + _army_radius()
 		_army_position.z = maxf(_army_position.z, stop_z)
 
+	_update_width_ratio(delta)
 	# 병력이 늘어 무리가 넓어지면 이동 범위가 줄어든다
 	var limit := _lateral_limit()
 	_target_x = clampf(_target_x, -limit, limit)
@@ -285,7 +289,7 @@ func _process(delta: float) -> void:
 	_check_gates()
 	_update_hud()
 	if not _finished and _section <= _section_count and -_army_position.z >= _section * _section_length:
-		_open_strategy_choice()
+		_enter_next_section()
 
 
 ## 정해진 간격마다 가장 가까운 적 무리와의 교전을 계산한다.
@@ -311,11 +315,19 @@ func _run_combat(delta: float) -> void:
 		if events["contact_started"]:
 			print("접촉: 아군 ", army.count, " / 적 ", _combat.enemy_count())
 			_shake_time = float(_tuning["screen_shake_duration"])
+			# 접촉 순간 터지는 책략을 적 무리 위에 띄운다
+			var enemy_anchor := _damage_anchor(_enemy_groups[0].global_position)
+			_show_strategy_trigger("fire_attack", enemy_anchor)
+			_show_strategy_trigger("vanguard", enemy_anchor - Vector2(0.0, float(_visual["hud"]["delta_font_size"])))
 		if events["ally_fired"] or events["enemy_fired"]:
 			_sfx.play("arrow")
+		# 불화살: 궁병이 아닌데 쏘았다면 일제 사격이다
+		if events["ally_fired"] and float(_units[army.unit_type]["range"]) <= 0.0:
+			_show_strategy_trigger("fire_arrows", _count_anchor())
 		_show_arrows(events)
 		if _combat.in_contact:
 			_sfx.play("hit")
+			_spawn_clash()
 
 		if _combat.is_ally_defeated():
 			_on_defeat()
@@ -363,15 +375,15 @@ func _run_boss_pattern(delta: float) -> void:
 		return
 	if _gap_to_front_enemy() > float(_tuning["boss"]["activate_distance"]):
 		return
-	var zones := int(_tuning["boss"]["zones"])
-	var ally_zone := BossPattern.zone_of(_army_position.x, _road_width, zones)
+	# 판정은 화면에 보이는 무리의 좌우 끝으로 한다. 붉은 면에 걸쳐 보이면 맞는다
+	var half_width := _display_extent().x
 	var before := army.count
 	var in_contact := _combat != null and _combat.in_contact
-	var events := _boss_pattern.tick(delta, army, ally_zone, in_contact, _rng)
+	var events := _boss_pattern.tick(delta, army, _army_position.x - half_width, _army_position.x + half_width, in_contact, _rng)
 	if int(events["warn_started"]) >= 0:
 		_boss_view.show_warning(int(events["warn_started"]))
 	if int(events["attacked"]) >= 0:
-		_boss_view.hide_warning()
+		_boss_view.flash_attack(int(events["attacked"]))
 		_shake_time = float(_tuning["screen_shake_duration"])
 		_sfx.play("hit")
 	if events["hit"]:
@@ -383,13 +395,16 @@ func _run_boss_pattern(delta: float) -> void:
 
 # --- 책략 ---
 
-## 구간 끝에서 책략 3택 화면을 띄우고 진행을 멈춘다.
+## 출전 직전에 책략 3택 화면을 띄운다. 정해진 횟수를 다 고를 때까지 달리지 않는다.
 func _open_strategy_choice() -> void:
 	_choosing = true
+	_pick_number += 1
+	_hud.set_overlay_hidden(true)
+	_hide_world_text()
 	var offer := _strategy.offer(_rng)
 	var screen: StrategyChoice = StrategyChoiceScene.instantiate()
 	add_child(screen)
-	screen.setup(offer, _strategy, _section, _section_count)
+	screen.setup(offer, _strategy, _pick_number, _pick_total)
 	screen.chosen.connect(_on_strategy_chosen.bind(offer))
 
 
@@ -400,24 +415,50 @@ func _on_strategy_chosen(id: String, offer: Array[String]) -> void:
 	for other in offer:
 		if other != id:
 			not_chosen.append(other)
-	_pick_log.write("strategy", _section, id, "|".join(not_chosen), army.unit_type, before, army.count, _strategy.owned)
+	# 출전 전에 고르므로 구간은 0으로 적는다
+	_pick_log.write("strategy", 0, id, "|".join(not_chosen), army.unit_type, before, army.count, _strategy.owned)
 	print("책략 %s 선택 (보유: %s)" % [_strategy.display_name(id), ", ".join(_strategy.owned)])
-	if army.count != before:
-		_hud.show_delta("%s\n%+d" % [_strategy.display_name(id), army.count - before], _count_anchor(), Color.WHITE)
 	# 같은 계열을 모으면 병사 색이 바뀐다
 	if new_family != "":
 		_army_view.set_color(_strategy.family_color(new_family))
-		_hud.show_delta("%s 계열 효과" % _strategy.family_name(new_family), _count_anchor(), _strategy.family_color(new_family))
+	if _pick_number < _pick_total:
+		_open_strategy_choice()
+		return
 
-	# 마지막 구간 뒤에는 보스전이 이어진다
-	_section += 1
+	# 다 골랐으면 출발한다
 	_choosing = false
-	# 의병: 새 구간(보스전 포함)을 시작할 때 병력 추가
+	_hud.set_overlay_hidden(false)
+	# 게이트 글자는 다음 프레임에 거리 규칙으로 다시 켜진다
+	_hero_view.set_flag_text_visible(true)
+	if new_family != "":
+		_hud.show_delta("%s 계열 효과" % _strategy.family_name(new_family), _count_anchor(), _strategy.family_color(new_family))
+	_start_section()
+
+
+## 구간 끝에 닿으면 멈추지 않고 다음 구간으로 넘어간다. 마지막 구간 뒤에는 보스전이 이어진다.
+func _enter_next_section() -> void:
+	_section += 1
+	_start_section()
+
+
+## 구간(보스전 포함)을 시작할 때: 지형 안내와 의병의 병력 추가
+func _start_section() -> void:
+	_announce_section()
 	var add := _strategy.section_start_add()
 	if add > 0:
 		army.set_count(army.count + add)
-		_hud.show_delta("의병\n%+d" % add, _count_anchor(), Color.WHITE)
+		_hud.show_delta("의병\n%+d" % add, _count_anchor(), _strategy_color("volunteers"))
 	_update_hud()
+
+
+func _strategy_color(id: String) -> Color:
+	return _strategy.family_color(_strategy.family_of(id))
+
+
+## 책략이 작동한 순간 그 이름을 계열 색으로 띄운다. 가진 책략만 띄운다.
+func _show_strategy_trigger(id: String, screen_pos: Vector2) -> void:
+	if _strategy.has(id):
+		_hud.show_delta(_strategy.display_name(id), screen_pos, _strategy_color(id))
 
 
 # --- 게이트 ---
@@ -426,6 +467,9 @@ func _on_strategy_chosen(id: String, offer: Array[String]) -> void:
 func _check_gates() -> void:
 	var remove_behind := float(_tuning["gate_view"]["remove_behind"])
 	for pair in _gate_pairs.duplicate():
+		# 전환 게이트의 대상이 지금 병종과 같으면 다른 종류의 게이트로 바꾼다(명세 3장)
+		if not pair.passed:
+			pair.avoid_switch_unit(army.unit_type, _rng)
 		if not pair.passed and _army_position.z <= pair.position.z:
 			pair.passed = true
 			var spec: Dictionary = pair.spec_for_x(_army_position.x)
@@ -444,7 +488,10 @@ func _check_gates() -> void:
 				return
 		# 먼 게이트의 글자는 숨겨 화면 위쪽에 겹쳐 보이지 않게 한다
 		if not pair.passed:
-			pair.set_text_visible(_army_position.z - pair.position.z <= float(_visual["gate"]["text_hide_distance"]))
+			var ahead: float = _army_position.z - pair.position.z
+			pair.set_text_visible(ahead <= float(_visual["gate"]["text_hide_distance"]))
+			# 가까이 오면 지금 선택될 칸을 밝게 보여준다. 판정과 같은 기준(무리 중심)이다
+			pair.set_choice_preview(GatePair.side_for_x(_army_position.x) if ahead <= float(_visual["gate"]["preview_distance"]) else -1)
 		# 지나간 게이트는 화면 뒤로 충분히 멀어지면 지운다
 		if pair.passed and pair.position.z > _army_position.z + remove_behind:
 			_gate_pairs.erase(pair)
@@ -489,6 +536,8 @@ func _finish(cleared: bool) -> void:
 	if _finished:
 		return
 	_finished = true
+	_hud.set_overlay_hidden(true)
+	_hide_world_text()
 	print("돌파" if cleared else "패배")
 	_pick_log.write("result", mini(_section, _section_count + 1), "clear" if cleared else "lose", "", army.unit_type, army.count, army.count, _strategy.owned)
 	_update_hud()
@@ -497,7 +546,44 @@ func _finish(cleared: bool) -> void:
 		"count": army.count,
 		"hero": _hero.name,
 		"strategies": _owned_text(),
+		"unit_type": army.unit_type,
+		"section_text": _reached_text(cleared),
+		"strategy_items": _strategy_items(),
+		"bonus_gold": _bonus_gold,
 	})
+
+
+## 책략 선택과 결과 화면 뒤로 전장의 글자(게이트, 깃발)가 비치지 않게 숨긴다.
+func _hide_world_text() -> void:
+	for pair in _gate_pairs:
+		pair.set_text_visible(false)
+	_hero_view.set_flag_text_visible(false)
+
+
+## 지형이 있는 구간에 처음 들어가면 화면 위쪽 안내 띠로 알린다.
+func _announce_section() -> void:
+	if _announced_section == _section:
+		return
+	_announced_section = _section
+	if _section == _bridge_section:
+		_hud.show_banner("좁은 다리")
+
+
+## 결과 화면의 "도달": 돌파면 보스 격파, 아니면 끝난 구간
+func _reached_text(cleared: bool) -> String:
+	if cleared:
+		return "보스 격파"
+	if _section > _section_count:
+		return "보스전"
+	return "구간 %d/%d" % [_section, _section_count]
+
+
+func _strategy_items() -> Array[Dictionary]:
+	var items: Array[Dictionary] = []
+	for id in _strategy.owned:
+		var family := _strategy.family_of(id)
+		items.append({"name": _strategy.display_name(id), "family": family, "color": _strategy.family_color(family)})
+	return items
 
 
 # --- 보조 ---
@@ -511,6 +597,12 @@ func _show_arrows(events: Dictionary) -> void:
 		for pool in group.pools:
 			if pool.is_alive() and float(_units[pool.unit_type]["range"]) > 0.0:
 				_arrow_view.fire("enemy_" + pool.unit_type, group.pool_center(pool.unit_type), _army_position)
+
+
+## 아군 앞줄(계산 위치)의 접촉선에 충돌 번쩍임을 띄운다.
+func _spawn_clash() -> void:
+	var front := Vector3(_army_position.x, 0.0, _army_position.z - _army_radius())
+	_clash_view.spawn(front, _display_extent().x * float(_visual["clash"]["width_ratio"]))
 
 
 ## 모은 피해를 표시 배율을 곱해 앞 적 무리 위에 하나로 띄운다.
@@ -574,7 +666,17 @@ func _army_radius() -> float:
 
 ## 아군 표시 대형의 반폭(x)과 앞뒤 반길이(y)
 func _display_extent() -> Vector2:
-	return ArmyView.display_extent(army.count, _visual, _display_limit, _road_width)
+	return ArmyView.display_extent(army.count, _visual, _display_limit, _road_width, _width_ratio)
+
+
+## 보스 구간에서는 대형 최대 폭을 정해진 시간에 걸쳐 좁힌다(명세 4장 보스 장각).
+func _update_width_ratio(delta: float) -> void:
+	var normal := float(_tuning["formation_max_width_ratio"])
+	var boss := float(_tuning["boss_formation_max_width_ratio"])
+	var target := boss if _section > _section_count else normal
+	var speed := absf(normal - boss) / float(_tuning["boss_formation_shrink_time"])
+	_width_ratio = move_toward(_width_ratio, target, speed * delta)
+	_army_view.set_max_width_ratio(_width_ratio)
 
 
 ## 좌우 이동 범위: 도로 반폭 − 무리 표시 반폭. 무리가 길 밖으로 나가지 않게 하되 최소값은 보장한다
@@ -627,6 +729,7 @@ func _update_hud() -> void:
 		var family := _strategy.family_of(id)
 		owned.append({"family": family, "color": _strategy.family_color(family)})
 	_hud.set_strategies(owned)
+	_update_boss_bar()
 	var section_text := "보스전" if _section > _section_count else "구간 %d/%d" % [_section, _section_count]
 	if _section == _bridge_section:
 		section_text += " (좁은 다리)"
@@ -634,6 +737,22 @@ func _update_hud() -> void:
 	_hud.set_status("%s %s   %s   책략: %s\n%s 기술 %s   감속 %s (G)   함정 금화 %d" % [
 		_stage_id, _hero.name, section_text, _owned_text(),
 		_hero.name, skill_text, "켜짐" if _gate_slowdown_enabled else "꺼짐", _bonus_gold])
+
+
+## 보스가 화면에 들어오면 머리 위에 이름을 붙인다. 체력은 상단 띠에 보인다.
+func _update_boss_bar() -> void:
+	if _boss_group == null or not is_instance_valid(_boss_group) or _boss_group.is_queued_for_deletion():
+		_hud.set_boss(false, "", Vector2.ZERO)
+		return
+	var pool: Army = _boss_group.pools[0]
+	var center: Vector3 = (_boss_group.views[pool.unit_type] as ArmyView).display_center()
+	var head := center + Vector3.UP * (_boss_height + float(_visual["boss_view"]["name_above"]))
+	var shown := _gap_to_boss() <= float(_visual["gate"]["text_hide_distance"]) and not _camera.is_position_behind(head)
+	_hud.set_boss(shown and pool.is_alive(), _units[pool.unit_type]["name"], _camera.unproject_position(head))
+
+
+func _gap_to_boss() -> float:
+	return _army_position.z - _boss_group.position.z
 
 
 func _owned_text() -> String:

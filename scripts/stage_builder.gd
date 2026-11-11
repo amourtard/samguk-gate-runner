@@ -24,13 +24,6 @@ static func plan(stage: Dictionary, stages: Dictionary, gates: Dictionary, units
 	for section in range(1, sections + 1):
 		var section_start := (section - 1) * section_length
 
-		# 구간마다 게이트 2~3쌍
-		var pair_count := rng.randi_range(int(stages["gate_pairs_per_section"]["min"]), int(stages["gate_pairs_per_section"]["max"]))
-		for i in pair_count:
-			var pair := _random_pair(section, gates, units, rng)
-			pair["distance"] = section_start + float(layout["gates"][i])
-			gate_pairs.append(pair)
-
 		# 구간마다 적 무리 2개. 스테이지 병종 비율을 무리마다 그대로 나눈다
 		for offset in layout["enemies"]:
 			enemy_groups.append({
@@ -39,6 +32,15 @@ static func plan(stage: Dictionary, stages: Dictionary, gates: Dictionary, units
 				"section": section,
 			})
 			group_index += 1
+
+		# 구간마다 게이트 2~3쌍. 전환 게이트의 대상은 그 게이트 다음에 만날 적 무리로 정한다
+		var pair_count := rng.randi_range(int(stages["gate_pairs_per_section"]["min"]), int(stages["gate_pairs_per_section"]["max"]))
+		for i in pair_count:
+			var distance := section_start + float(layout["gates"][i])
+			var pair := _random_pair(section, gates, rng, switch_target(distance, enemy_groups, units, tuning))
+			pair["distance"] = distance
+			pair["section"] = section
+			gate_pairs.append(pair)
 
 	var bridge := {}
 	var bridge_section := int(stage["bridge_section"])
@@ -116,31 +118,51 @@ static func _random_composition(units: Dictionary, max_ratio: float, rng: Random
 	return even
 
 
-## 명세의 쌍 규칙(좌우 다른 종류, 도박은 증원 +N과만, ×2는 2구간부터)을 지키는 쌍을 무작위로 뽑는다.
-static func _random_pair(section: int, gates: Dictionary, units: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+## distance 다음에 만날 적 무리에서 가장 많은 병종에게 유리한 병종. 그런 무리나 병종이 없으면 빈 문자열.
+## 수가 같으면 앞줄 순서(tuning의 front_order)가 빠른 병종을 기준으로 삼는다.
+static func switch_target(distance: float, enemy_groups: Array[Dictionary], units: Dictionary, tuning: Dictionary) -> String:
+	var next := {}
+	for group in enemy_groups:
+		if float(group["distance"]) > distance and (next.is_empty() or float(group["distance"]) < float(next["distance"])):
+			next = group
+	if next.is_empty():
+		return ""
+	var dominant := ""
+	var dominant_count := 0
+	for unit_type: String in tuning["combat"]["front_order"]:
+		var count := int((next["units"] as Dictionary).get(unit_type, 0))
+		if count > dominant_count:
+			dominant = unit_type
+			dominant_count = count
+	for unit_type in Gate.switch_units(units):
+		if str(units[unit_type]["strong_against"]) == dominant:
+			return unit_type
+	return ""
+
+
+## 명세의 쌍 규칙(좌우 다른 종류, 도박과 함정은 증원 +N과만, ×2는 2구간부터)을 지키는 쌍을 무작위로 뽑는다.
+## switch_unit은 전환 게이트의 대상 병종이고, 비어 있으면 전환 게이트를 뽑지 않는다.
+static func _random_pair(section: int, gates: Dictionary, rng: RandomNumberGenerator, switch_unit: String) -> Dictionary:
 	var types: Array = gates.keys()
+	if switch_unit == "":
+		types.erase("switch")
 	for attempt in MAX_PAIR_ATTEMPTS:
-		var left := _random_gate(types[rng.randi_range(0, types.size() - 1)], gates, units, rng)
-		var right := _random_gate(types[rng.randi_range(0, types.size() - 1)], gates, units, rng)
+		var left := _random_gate(types[rng.randi_range(0, types.size() - 1)], gates, rng, switch_unit)
+		var right := _random_gate(types[rng.randi_range(0, types.size() - 1)], gates, rng, switch_unit)
 		if Gate.pair_error(left, right, gates, section) == "":
 			return {"left": left, "right": right}
 	push_error("규칙에 맞는 게이트 쌍을 찾지 못했습니다")
 	return {"left": {"type": "reinforce", "option": gates["reinforce"]["options"].keys()[0]}, "right": {"type": "trap"}}
 
 
-static func _random_gate(type: String, gates: Dictionary, units: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+static func _random_gate(type: String, gates: Dictionary, rng: RandomNumberGenerator, switch_unit: String) -> Dictionary:
 	var spec := {"type": type}
 	var data: Dictionary = gates[type]
 	if data.has("options"):
 		var options: Array = data["options"].keys()
 		spec["option"] = options[rng.randi_range(0, options.size() - 1)]
 	if type == "switch":
-		var unit_types: Array = []
-		for unit_type in units:
-			# 보스처럼 체력만 쓰는 항목은 전환 대상이 아니다
-			if float(units[unit_type]["dps"]) > 0.0:
-				unit_types.append(unit_type)
-		spec["unit"] = unit_types[rng.randi_range(0, unit_types.size() - 1)]
+		spec["unit"] = switch_unit
 	return spec
 
 

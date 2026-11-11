@@ -7,56 +7,88 @@ layer = 10
 script = ExtResource("1_result")
 
 [node name="Dim" type="ColorRect" parent="."]
+unique_name_in_owner = true
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0, 0, 0, 0.75)
+color = Color(0, 0, 0, 0.82)
 
-[node name="Center" type="CenterContainer" parent="."]
+[node name="Margin" type="MarginContainer" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/margin_left = 60
+theme_override_constants/margin_top = 220
+theme_override_constants/margin_right = 60
+theme_override_constants/margin_bottom = 110
 
-[node name="Box" type="VBoxContainer" parent="Center"]
-custom_minimum_size = Vector2(800, 0)
+[node name="Box" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
-theme_override_constants/separation = 40
+theme_override_constants/separation = 36
 
-[node name="Title" type="Label" parent="Center/Box"]
+[node name="Banner" type="PanelContainer" parent="Margin/Box"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 140
+
+[node name="BannerBox" type="VBoxContainer" parent="Margin/Box/Banner"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Margin/Box/Banner/BannerBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 24
 text = "돌파"
 horizontal_alignment = 1
 
-[node name="Detail" type="Label" parent="Center/Box"]
+[node name="Subtitle" type="Label" parent="Margin/Box/Banner/BannerBox"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 44
 horizontal_alignment = 1
-autowrap_mode = 3
 
-[node name="NextButton" type="Button" parent="Center/Box"]
+[node name="SummaryPanel" type="PanelContainer" parent="Margin/Box"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
-theme_override_font_sizes/font_size = 60
-text = "다음 스테이지"
 
-[node name="RetryButton" type="Button" parent="Center/Box"]
+[node name="Summary" type="VBoxContainer" parent="Margin/Box/SummaryPanel"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
-theme_override_font_sizes/font_size = 60
+theme_override_constants/separation = 22
+
+[node name="Spacer" type="Control" parent="Margin/Box"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MinorRow" type="HBoxContainer" parent="Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="HeroesButton" type="Button" parent="Margin/Box/MinorRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 44
+text = "장수 선택"
+
+[node name="UpgradeButton" type="Button" parent="Margin/Box/MinorRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 44
+text = "강화"
+
+[node name="RetryButton" type="Button" parent="Margin/Box"]
+unique_name_in_owner = true
+layout_mode = 2
 text = "다시 도전"
 
-[node name="HeroesButton" type="Button" parent="Center/Box"]
+[node name="NextButton" type="Button" parent="Margin/Box"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
-theme_override_font_sizes/font_size = 60
-text = "장수 선택"
+text = "다음 스테이지"

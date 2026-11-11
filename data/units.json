@@ -35,6 +35,6 @@
 		"range": 0,
 		"charge_damage": 0,
 		"strong_against": "",
-		"mesh": { "shape": "box", "size": [2.4, 3.2, 2.4] }
+		"body_radius": 1.2
 	}
 }

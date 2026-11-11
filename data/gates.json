@@ -34,6 +34,7 @@
 		"name": "함정",
 		"color": "#8a8a8a",
 		"loss_ratio": 0.3,
-		"gold_bonus": 100
+		"gold_bonus": 100,
+		"pair_with": ["reinforce"]
 	}
 }

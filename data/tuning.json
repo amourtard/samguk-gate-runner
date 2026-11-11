@@ -18,6 +18,9 @@
 		"front_order": ["infantry", "cavalry", "archer", "boss"]
 	},
 	"soldier_display_limit": 200,
+	"formation_max_width_ratio": 0.6,
+	"boss_formation_max_width_ratio": 0.4,
+	"boss_formation_shrink_time": 0.5,
 	"number_popup": {
 		"duration": 0.1,
 		"scale": 1.5
@@ -26,6 +29,11 @@
 		"duration": 0.9,
 		"rise": 160,
 		"lighten": 0.4
+	},
+	"gold": {
+		"clear_per_stage": 100,
+		"fail_ratio": 0.3,
+		"clear_cap": 1000
 	},
 	"display_damage_multiplier": 100,
 	"damage_number": {
@@ -40,7 +48,6 @@
 	},
 	"hero_skill_view": {
 		"flash_time": 0.3,
-		"alpha": 0.45,
 		"lift": 0.04,
 		"line_width": 1.6,
 		"pulse_radius": 6,
@@ -73,17 +80,15 @@
 	"boss": {
 		"pattern_interval": 5,
 		"warn_time": 1.2,
-		"zones": 3,
+		"zones": 2,
+		"hit_edge_tolerance": 0,
 		"hit_loss_ratio": 0.25,
 		"contact_loss_per_second": 2,
 		"activate_distance": 40,
 		"warn_length": 40,
 		"warn_lift": 0.03,
 		"warn_alpha": 0.45,
-		"warn_color": "#ff2020",
-		"label_height": 4.2,
-		"label_font_size": 160,
-		"label_pixel_size": 0.01
+		"warn_color": "#ff2020"
 	},
 	"arrow_view": {
 		"interval": 0.3,
@@ -93,8 +98,6 @@
 		"spread": 1.2,
 		"target_spread_ratio": 0.5,
 		"height": 0.6,
-		"size": [0.05, 0.05, 0.45],
-		"color": "#3b2a1a",
 		"max_count": 120
 	},
 	"road": {
@@ -117,8 +120,6 @@
 	"colors": {
 		"ally": "#3a6fe0",
 		"enemy": "#d83a3a",
-		"bridge": "#6b4a2b",
-		"water": "#3c6e9e",
 		"boss": "#5a1a1a",
 		"hero_skill": "#ffd24a"
 	},

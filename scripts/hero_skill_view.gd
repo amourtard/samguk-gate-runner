@@ -10,21 +10,21 @@ var _lift: float
 var _line_width: float
 var _pulse_radius: float
 var _guard_margin: float
-var _color: Color
+# 기술 종류별 재질 설정: {"color", "alpha", "additive"}
+var _styles: Dictionary
 var _guard_disc: MeshInstance3D
 
 
-func setup(tuning: Dictionary) -> void:
+func setup(tuning: Dictionary, visual: Dictionary) -> void:
 	var data: Dictionary = tuning["hero_skill_view"]
 	_flash_time = float(data["flash_time"])
 	_lift = float(data["lift"])
 	_line_width = float(data["line_width"])
 	_pulse_radius = float(data["pulse_radius"])
 	_guard_margin = float(data["guard_margin"])
-	_color = Color.html(tuning["colors"]["hero_skill"])
-	_color.a = float(data["alpha"])
+	_styles = visual["skill_view"]
 
-	_guard_disc = _make_disc()
+	_guard_disc = _make_disc("guard")
 	_guard_disc.visible = false
 	add_child(_guard_disc)
 
@@ -34,7 +34,7 @@ func show_strike(from: Vector3, to: Vector3) -> void:
 	var length := maxf(from.z - to.z, 0.1)
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(_line_width, length)
-	var line := _make_instance(plane)
+	var line := _make_instance(plane, "strike")
 	add_child(line)
 	# 아군 쪽 끝을 기준점으로 두고 전방(-Z)으로 늘린다
 	line.global_position = Vector3(from.x, _lift, from.z)
@@ -48,7 +48,7 @@ func show_strike(from: Vector3, to: Vector3) -> void:
 
 ## 아군 무리에서 퍼지는 원형 도형.
 func show_pulse(center: Vector3) -> void:
-	var disc := _make_disc()
+	var disc := _make_disc("pulse")
 	add_child(disc)
 	disc.global_position = Vector3(center.x, _lift, center.z)
 	disc.scale = Vector3(0.0, 1.0, 0.0)
@@ -69,17 +69,23 @@ func set_guard(on: bool, center: Vector3, formation_radius: float) -> void:
 
 
 ## 반지름 1인 납작한 원판. scale로 크기를 정한다.
-func _make_disc() -> MeshInstance3D:
+func _make_disc(style: String) -> MeshInstance3D:
 	var cylinder := CylinderMesh.new()
 	cylinder.top_radius = 1.0
 	cylinder.bottom_radius = 1.0
 	cylinder.height = _lift
-	return _make_instance(cylinder)
+	return _make_instance(cylinder, style)
 
 
-func _make_instance(mesh: Mesh) -> MeshInstance3D:
+## 기술 종류별 색과 투명도. 더하기 혼합이면 땅 색에 빛이 얹힌 것처럼 보인다
+func _make_instance(mesh: Mesh, style: String) -> MeshInstance3D:
+	var data: Dictionary = _styles[style]
+	var color := Color.html(data["color"])
+	color.a = float(data["alpha"])
 	var material := StandardMaterial3D.new()
-	material.albedo_color = _color
+	material.albedo_color = color
+	if bool(data["additive"]):
+		material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	var instance := MeshInstance3D.new()

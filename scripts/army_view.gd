@@ -16,6 +16,7 @@ var _visual: Dictionary
 var _display_limit: int
 var _calc_spacing: float
 var _road_width: float
+var _max_width_ratio: float
 # 앞줄 방향. 아군은 -1(-Z가 전방), 적은 +1(아군 쪽)
 var _facing := -1.0
 # 0 이상이면 앞줄을 이 계산 반지름에 고정한다(적 무리는 처음 앞줄에서 움직이지 않는다)
@@ -27,6 +28,8 @@ var _base_color: Color
 var _brightness := 0.0
 var _unit_type := ""
 var _alive_transforms: Array[Transform3D] = []
+# 표시 대형 중심의 앞뒤 위치(노드 기준)
+var _center_z := 0.0
 # 사라지는 병사: {"transform": 원래 변환, "t": 지난 시간}
 var _dying: Array[Dictionary] = []
 
@@ -38,6 +41,7 @@ func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary
 	_display_limit = int(tuning["soldier_display_limit"])
 	_calc_spacing = float(tuning["formation"]["spacing"])
 	_road_width = float(tuning["road"]["width"])
+	_max_width_ratio = float(tuning["formation_max_width_ratio"])
 	_facing = facing
 	_fixed_front = fixed_front_radius
 	_death_time = float(visual["soldier"]["death_time"])
@@ -75,12 +79,25 @@ static func display_radius(count: int, visual: Dictionary, display_limit: int) -
 
 
 ## 표시 대형의 반폭(x)과 앞뒤 반길이(y). 반지름이 폭 제한을 넘으면 넓이를 유지한 채 앞뒤로 늘인 타원이 된다.
-static func display_extent(count: int, visual: Dictionary, display_limit: int, road_width: float) -> Vector2:
+static func display_extent(count: int, visual: Dictionary, display_limit: int, road_width: float, max_width_ratio: float) -> Vector2:
 	var radius := display_radius(count, visual, display_limit)
-	var max_half := road_width * float(visual["formation"]["max_width_road_ratio"]) / 2.0
+	var max_half := road_width * max_width_ratio / 2.0
 	if radius <= max_half:
 		return Vector2(radius, radius)
 	return Vector2(max_half, radius * radius / max_half)
+
+
+## 표시 대형 중심의 월드 좌표(보스 이름을 머리 위에 붙일 때 쓴다)
+func display_center() -> Vector3:
+	return global_position + Vector3(0.0, 0.0, _center_z)
+
+
+## 표시 대형의 최대 폭 비율을 바꾼다(보스 구간에서 좁힌다).
+func set_max_width_ratio(ratio: float) -> void:
+	if is_equal_approx(ratio, _max_width_ratio):
+		return
+	_max_width_ratio = ratio
+	_rebuild()
 
 
 ## 계열 효과 같은 상태 변화로 병사 색을 바꾼다. 밝기 보정은 유지한다.
@@ -129,19 +146,21 @@ func _rebuild() -> void:
 	# 표시 대형의 앞줄을 계산 대형의 앞줄에 맞춘다
 	var spacing := display_spacing(shown, _visual)
 	var display_r := spacing * sqrt(maxi(shown, 1))
-	var extent := display_extent(shown, _visual, _display_limit, _road_width)
+	var extent := display_extent(shown, _visual, _display_limit, _road_width, _max_width_ratio)
 	# 원형 배치를 좌우로 줄이고 앞뒤로 늘여 폭 제한 안에 넣는다(넓이는 같다)
 	var squeeze := Vector2(extent.x / display_r, extent.y / display_r)
 	var center_z := _facing * (_front_radius() - extent.y)
-	# 모델이 없는 큰 도형(보스)은 계산 위치 그대로 둔다
-	if not _visual["models"].has(_unit_type):
-		center_z = 0.0
+	# 몸집이 큰 항목(보스)은 모델 앞면을 계산 앞줄에 맞춘다(크게 그려도 교전 거리가 어긋나 보이지 않게)
+	if _units[_unit_type].has("body_radius"):
+		var front_extent := -multimesh.mesh.get_aabb().position.z * model_scale(_unit_type, _visual)
+		center_z = _facing * (_front_radius() - front_extent)
+	_center_z = center_z
 	_alive_transforms.resize(shown)
 	for i in shown:
 		var radius := spacing * sqrt(i + 0.5)
 		var angle := i * GOLDEN_ANGLE
 		var offset := Vector3(cos(angle) * radius * squeeze.x, 0.0, center_z + sin(angle) * radius * squeeze.y)
-		_alive_transforms[i] = Transform3D(_facing_basis(), offset)
+		_alive_transforms[i] = Transform3D(_facing_basis().scaled(Vector3.ONE * model_scale(_unit_type, _visual)), offset)
 		multimesh.set_instance_transform(i, _alive_transforms[i])
 		multimesh.set_instance_custom_data(i, Color(fposmod(i * PHASE_STEP, 1.0), 0.0, 0.0, 0.0))
 		multimesh.set_instance_color(i, Color.WHITE)
@@ -172,34 +191,16 @@ func _write_dying() -> void:
 
 
 ## 모델은 -Z를 앞으로 만든다. 적은 아군 쪽(+Z)을 보도록 돌린다.
+## 모델 표시 배율(보스처럼 크게 보일 항목). 없으면 1
+static func model_scale(unit_type: String, visual: Dictionary) -> float:
+	return float(visual["model_scale"].get(unit_type, 1.0))
+
+
 func _facing_basis() -> Basis:
 	return Basis.IDENTITY if _facing < 0.0 else Basis(Vector3.UP, PI)
 
 
 func _get_mesh(unit_type: String) -> Mesh:
-	if _mesh_cache.has(unit_type):
-		return _mesh_cache[unit_type]
-	var mesh: Mesh
-	if _visual["models"].has(unit_type):
-		mesh = ModelBuilder.build(_visual["models"][unit_type])
-	else:
-		# 모델이 없는 항목(보스)은 데이터의 기본 도형을 발이 바닥에 닿게 쓴다
-		mesh = _fallback_mesh(_units[unit_type]["mesh"])
-	_mesh_cache[unit_type] = mesh
-	return mesh
-
-
-func _fallback_mesh(mesh_data: Dictionary) -> Mesh:
-	var part := {"shape": mesh_data["shape"], "team": 1.0}
-	var height := 0.0
-	if mesh_data["shape"] == "box":
-		part["size"] = mesh_data["size"]
-		height = float(mesh_data["size"][1])
-	else:
-		part["top"] = mesh_data["radius"]
-		part["bottom"] = mesh_data["radius"]
-		part["height"] = mesh_data["height"]
-		part["segments"] = mesh_data.get("radial_segments", 8)
-		height = float(mesh_data["height"])
-	part["pos"] = [0, height / 2.0, 0]
-	return ModelBuilder.build([part])
+	if not _mesh_cache.has(unit_type):
+		_mesh_cache[unit_type] = ModelBuilder.build(_visual["models"][unit_type])
+	return _mesh_cache[unit_type]

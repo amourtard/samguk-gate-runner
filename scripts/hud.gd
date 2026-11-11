@@ -9,6 +9,7 @@ const FAMILY_ICON := "res://assets/icons/family_%s.svg"
 @onready var _count_box: HBoxContainer = %CountBox
 @onready var _count_icon: TextureRect = %CountIcon
 @onready var _count_label: Label = %CountLabel
+@onready var _top: Control = $Top
 @onready var _stage_label: Label = %StageLabel
 @onready var _strip_back: Panel = %StripBack
 @onready var _strip_title: Label = %StripTitle
@@ -35,6 +36,14 @@ var _delta_rise: float
 var _count_tween: Tween
 var _damage_data: Dictionary
 var _damage_color: Color
+# 보스 머리 위 이름. 체력은 상단 띠에 큰 막대로 보인다
+var _boss_name: Label
+var _boss_data: Dictionary
+# 책략 선택이나 결과 화면이 떠 있는 동안 상단 표시와 무리 위 숫자를 숨긴다
+var _overlay_hidden := false
+var _banner: PanelContainer
+var _banner_label: Label
+var _banner_tween: Tween
 
 
 func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary, hero_name: String) -> void:
@@ -61,6 +70,9 @@ func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary
 	_strip_back.add_theme_stylebox_override("panel", back)
 	_skill_gauge.setup(hero_name, _hud)
 	_status_label.visible = bool(visual["debug"]["overlay_visible"])
+	_boss_data = visual["boss_view"]
+	_build_boss_name(_boss_data)
+	_build_banner(visual["banner"])
 
 	_army.changed.connect(_on_army_changed)
 	_on_army_changed()
@@ -119,6 +131,12 @@ func set_next_enemy(pools: Array[Army]) -> void:
 	if total == 0:
 		return
 
+	_strip_title.text = "다음 적"
+	if pools.size() == 1 and _units[pools[0].unit_type].get("show_health", false):
+		_strip_title.text = _units[pools[0].unit_type]["name"]
+		_strip.add_child(_boss_health_bar(pools[0]))
+		return
+
 	var icon_size := float(_hud["strip_icon_size"])
 	for pool in pools:
 		if not pool.is_alive():
@@ -159,6 +177,106 @@ func set_next_enemy(pools: Array[Army]) -> void:
 		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		segment.add_child(bar)
 		_strip.add_child(segment)
+
+
+## 보스 이름을 screen_pos(글자 아래 가운데)에 붙인다.
+func set_boss(shown: bool, boss_name: String, screen_pos: Vector2) -> void:
+	_boss_name.visible = shown and not _overlay_hidden
+	if not shown:
+		return
+	_boss_name.text = boss_name
+	_boss_name.reset_size()
+	_boss_name.position = screen_pos - Vector2(_boss_name.size.x / 2.0, _boss_name.size.y)
+
+
+func _build_boss_name(data: Dictionary) -> void:
+	_boss_name = Label.new()
+	_boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_boss_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_boss_name.add_theme_font_size_override("font_size", int(data["name_font_size"]))
+	_boss_name.add_theme_constant_override("outline_size", int(_hud["count_outline"]))
+	_boss_name.add_theme_color_override("font_outline_color", Color.BLACK)
+	_boss_name.visible = false
+	_damage_root.add_child(_boss_name)
+
+
+## 상단 띠의 보스 체력 막대. 남은 체력 비율만큼 채우고 가운데에 남은 체력과 최대 체력을 적는다
+func _boss_health_bar(pool: Army) -> Control:
+	var bar := Control.new()
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	bar.custom_minimum_size = Vector2(0, float(_boss_data["strip_bar_height"]))
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var back := ColorRect.new()
+	back.color = Color.html(_boss_data["strip_bar_back"])
+	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(back)
+	var fill := ColorRect.new()
+	fill.color = Color.html(_boss_data["strip_bar_fill"])
+	fill.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	fill.anchor_right = clampf(pool.total_health / pool.unit_health, 0.0, 1.0)
+	fill.offset_right = 0.0
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(fill)
+	var text := Label.new()
+	text.text = "%d / %d" % [ceili(pool.total_health), ceili(pool.unit_health)]
+	text.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	text.add_theme_font_size_override("font_size", int(_boss_data["strip_bar_font_size"]))
+	text.add_theme_constant_override("outline_size", 8)
+	text.add_theme_color_override("font_outline_color", Color.BLACK)
+	text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.add_child(text)
+	return bar
+
+
+## 다른 화면이 위에 떠 있는 동안 상단 표시, 무리 위 숫자, 보스 이름을 숨긴다.
+func set_overlay_hidden(hidden: bool) -> void:
+	_overlay_hidden = hidden
+	_top.visible = not hidden
+	_count_box.visible = not hidden
+	_popup_root.visible = not hidden
+	if hidden:
+		_boss_name.visible = false
+		_banner.visible = false
+
+
+## 화면 위쪽 안내 띠(지형 이름 등)를 잠깐 보여주고 사라지게 한다.
+func show_banner(text: String) -> void:
+	_banner_label.text = text
+	_banner.visible = true
+	_banner.modulate.a = 1.0
+	if _banner_tween != null:
+		_banner_tween.kill()
+	var data_fade := _banner.get_meta("fade") as float
+	_banner_tween = _banner.create_tween()
+	_banner_tween.tween_interval(float(_banner.get_meta("duration")) - data_fade)
+	_banner_tween.tween_property(_banner, "modulate:a", 0.0, data_fade)
+	_banner_tween.tween_callback(_banner.hide)
+
+
+func _build_banner(data: Dictionary) -> void:
+	_banner = PanelContainer.new()
+	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_banner.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_banner.offset_top = float(data["top"])
+	_banner.offset_bottom = float(data["top"]) + float(data["height"])
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.html(data["color"])
+	_banner.add_theme_stylebox_override("panel", style)
+	_banner_label = Label.new()
+	_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_banner_label.add_theme_font_size_override("font_size", int(data["font_size"]))
+	_banner_label.add_theme_constant_override("outline_size", int(data["outline"]))
+	_banner_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_banner.add_child(_banner_label)
+	_banner.set_meta("duration", float(data["duration"]))
+	_banner.set_meta("fade", float(data["fade"]))
+	_banner.visible = false
+	add_child(_banner)
 
 
 func set_status(text: String) -> void:

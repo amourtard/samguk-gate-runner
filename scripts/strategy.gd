@@ -73,6 +73,30 @@ func active_family() -> String:
 	return ""
 
 
+## 계열 id 목록(데이터 순서)
+func family_ids() -> Array:
+	return _families.keys()
+
+
+## 계열 효과가 켜지는 데 필요한 같은 계열 책략 수
+func bonus_count() -> int:
+	return _bonus_count
+
+
+## 지금까지 고른 책략 중 그 계열의 수
+func family_count(family: String) -> int:
+	var count := 0
+	for id in owned:
+		if family_of(id) == family:
+			count += 1
+	return count
+
+
+## 이 책략을 고르면 계열 효과가 새로 켜지는가
+func would_activate(id: String) -> bool:
+	return active_family() == "" and family_count(family_of(id)) + 1 >= _bonus_count
+
+
 func family_color(family: String) -> Color:
 	return Color.html(_families[family]["color"])
 

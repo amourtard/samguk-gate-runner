@@ -4,10 +4,11 @@ extends Node3D
 ## 소품은 판 시작부터 보스 너머까지 한 번에 MultiMesh로 뿌리고, 도로 안쪽에는 두지 않는다.
 
 
-func setup(environment: Environment, light: DirectionalLight3D, length: float, road_width: float, visual: Dictionary) -> void:
+## clear_ranges: 소품을 두지 않을 전진 거리 범위 목록(Vector2(시작, 끝), 단위 m)
+func setup(environment: Environment, light: DirectionalLight3D, length: float, road_width: float, visual: Dictionary, clear_ranges: Array[Vector2] = []) -> void:
 	_setup_sky(environment, visual)
 	_setup_light(light, environment, visual)
-	_scatter_props(length, road_width, visual["props"])
+	_scatter_props(length, road_width, visual["props"], clear_ranges)
 
 
 func _setup_sky(environment: Environment, visual: Dictionary) -> void:
@@ -43,7 +44,7 @@ func _setup_light(light: DirectionalLight3D, environment: Environment, visual: D
 	environment.ambient_light_energy = float(data["ambient_energy"])
 
 
-func _scatter_props(length: float, road_width: float, data: Dictionary) -> void:
+func _scatter_props(length: float, road_width: float, data: Dictionary, clear_ranges: Array[Vector2]) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(data["seed"])
 	var segment := float(data["segment"])
@@ -65,6 +66,8 @@ func _scatter_props(length: float, road_width: float, data: Dictionary) -> void:
 				var z := start_z - (s + rng.randf()) * segment
 				var size := rng.randf_range(float(type_data["scale_min"]), float(type_data["scale_max"]))
 				var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * size)
+				if _is_cleared(-z, clear_ranges):
+					continue
 				transforms.append(Transform3D(basis, Vector3(x, 0.0, z)))
 		var multimesh := MultiMesh.new()
 		multimesh.transform_format = MultiMesh.TRANSFORM_3D
@@ -76,3 +79,10 @@ func _scatter_props(length: float, road_width: float, data: Dictionary) -> void:
 		instance.multimesh = multimesh
 		instance.material_override = ModelBuilder.make_material(Color.WHITE)
 		add_child(instance)
+
+
+func _is_cleared(distance: float, clear_ranges: Array[Vector2]) -> bool:
+	for range_ in clear_ranges:
+		if distance >= range_.x and distance <= range_.y:
+			return true
+	return false

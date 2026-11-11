@@ -11,6 +11,7 @@ static func apply(army: Army, spec: Dictionary, gates: Dictionary, units: Dictio
 	var before := army.count
 	var gold := 0
 	var extra := ""
+	var note := ""
 
 	match spec["type"]:
 		"reinforce":
@@ -20,8 +21,11 @@ static func apply(army: Army, spec: Dictionary, gates: Dictionary, units: Dictio
 				gained = int(option["add"])
 			else:
 				gained = army.count * (int(option["mult"]) - 1)
-			# 징병과 물량 계열 효과는 늘어나는 양에 붙는다
-			army.set_count(army.count + strategy.adjust_reinforce(gained))
+			# 징병과 물량 계열 효과는 늘어나는 양에 붙는다. 책략으로 늘어난 몫은 따로 알린다
+			var adjusted := strategy.adjust_reinforce(gained)
+			army.set_count(army.count + adjusted)
+			if adjusted > gained:
+				note = "책략 +%d" % (adjusted - gained)
 		"switch":
 			var unit_type: String = spec["unit"]
 			army.set_unit_type(unit_type, float(units[unit_type]["health"]))
@@ -54,7 +58,32 @@ static func apply(army: Army, spec: Dictionary, gates: Dictionary, units: Dictio
 	var popup := "%+d" % delta
 	if extra != "":
 		popup = extra + "\n" + popup
+	if note != "":
+		popup += "\n" + note
 	return {"count_delta": delta, "popup": popup, "gold": gold}
+
+
+## 병종 전환 게이트의 대상이 될 수 있는 병종. 보스처럼 체력만 쓰는 항목은 뺀다
+static func switch_units(units: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for unit_type: String in units:
+		if float(units[unit_type]["dps"]) > 0.0:
+			result.append(unit_type)
+	return result
+
+
+## 전환 게이트의 대상이 지금 아군 병종과 같으면 그 자리에 놓을 다른 종류의 게이트를 돌려준다(명세 3장).
+## 짝(other)이 강화면 증원, 아니면 강화다. 바꿀 필요가 없으면 빈 사전.
+static func switch_replacement(spec: Dictionary, other: Dictionary, current_unit: String, gates: Dictionary, section: int, rng: RandomNumberGenerator) -> Dictionary:
+	if str(spec["type"]) != "switch" or str(spec["unit"]) != current_unit:
+		return {}
+	var type := "reinforce" if str(other["type"]) == "empower" else "empower"
+	var options: Array[String] = []
+	for option_name: String in gates[type]["options"]:
+		var option: Dictionary = gates[type]["options"][option_name]
+		if section >= int(option.get("min_section", section)):
+			options.append(option_name)
+	return {"type": type, "option": options[rng.randi_range(0, options.size() - 1)]}
 
 
 ## 게이트 판에 쓰는 문구. 첫 줄은 크게 보일 효과, 둘째 줄은 대가다.
