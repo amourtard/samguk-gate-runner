@@ -7,6 +7,8 @@ extends RefCounted
 
 # 규칙에 맞는 게이트 쌍을 찾을 때까지 다시 뽑는 최대 횟수
 const MAX_PAIR_ATTEMPTS := 200
+# 병종 비율 상한을 지키는 구성을 찾을 때까지 다시 뽑는 최대 횟수
+const MAX_COMPOSITION_ATTEMPTS := 200
 
 
 static func plan(stage: Dictionary, stages: Dictionary, gates: Dictionary, units: Dictionary, tuning: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
@@ -57,6 +59,61 @@ static func plan(stage: Dictionary, stages: Dictionary, gates: Dictionary, units
 		"section_length": section_length,
 		"sections": sections,
 	}
+
+
+## 데이터 목록 뒤(1-5 이후)의 스테이지를 만든다. index는 0부터 센 스테이지 순번이다.
+## 마지막 데이터 스테이지를 기준으로 한 단계마다 적 병력 합계와 보스 체력에 배율을 곱한다.
+## 적 구성은 전투 병종 비율을 무작위로 정하되 한 병종이 상한을 넘지 않고, 좁은 다리는 확률로 한 구간에 둔다.
+static func endless_stage(index: int, stages: Dictionary, units: Dictionary, tuning: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
+	var list: Array = stages["list"]
+	var last: Dictionary = list[list.size() - 1]
+	var steps := index - (list.size() - 1)
+	var endless: Dictionary = tuning["endless"]
+
+	# 이름은 마지막 데이터 스테이지 번호에 이어 붙인다. 예: 1-5 다음은 1-6
+	var id_parts: PackedStringArray = str(last["id"]).split("-")
+	var id := "%s-%d" % [id_parts[0], int(id_parts[1]) + steps]
+
+	var bridge_section := 0
+	if rng.randf() < float(endless["bridge_chance"]):
+		bridge_section = rng.randi_range(1, int(stages["sections"]))
+
+	return {
+		"id": id,
+		"composition": _random_composition(units, float(endless["max_unit_ratio"]), rng),
+		"enemy_total": roundi(float(last["enemy_total"]) * pow(float(endless["enemy_total_mult"]), steps)),
+		"bridge_section": bridge_section,
+		"boss_health": roundi(float(last["boss_health"]) * pow(float(endless["boss_health_mult"]), steps)),
+	}
+
+
+## 전투 병종(보스 제외) 비율을 무작위로 정한다. 한 병종이 max_ratio를 넘으면 다시 뽑는다.
+static func _random_composition(units: Dictionary, max_ratio: float, rng: RandomNumberGenerator) -> Dictionary:
+	var unit_types: Array = []
+	for unit_type in units:
+		if float(units[unit_type]["dps"]) > 0.0:
+			unit_types.append(unit_type)
+	for attempt in MAX_COMPOSITION_ATTEMPTS:
+		var weights := {}
+		var sum := 0.0
+		for unit_type in unit_types:
+			weights[unit_type] = rng.randf()
+			sum += float(weights[unit_type])
+		if sum <= 0.0:
+			continue
+		var composition := {}
+		var within_limit := true
+		for unit_type in unit_types:
+			composition[unit_type] = float(weights[unit_type]) / sum
+			if float(composition[unit_type]) > max_ratio:
+				within_limit = false
+		if within_limit:
+			return composition
+	# 상한을 지키는 비율을 찾지 못하면 고르게 나눈다
+	var even := {}
+	for unit_type in unit_types:
+		even[unit_type] = 1.0 / unit_types.size()
+	return even
 
 
 ## 명세의 쌍 규칙(좌우 다른 종류, 도박은 증원 +N과만, ×2는 2구간부터)을 지키는 쌍을 무작위로 뽑는다.

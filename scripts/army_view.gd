@@ -10,6 +10,8 @@ var _units: Dictionary
 var _display_limit: int
 var _spacing: float
 var _mesh_cache: Dictionary = {}
+var _base_color: Color
+var _brightness := 0.0
 
 
 func setup(army: Army, units: Dictionary, tuning: Dictionary, color: Color) -> void:
@@ -21,6 +23,7 @@ func setup(army: Army, units: Dictionary, tuning: Dictionary, color: Color) -> v
 	multimesh = MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 
+	_base_color = color
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
 	material_override = material
@@ -34,9 +37,20 @@ static func formation_radius(count: int, spacing: float) -> float:
 	return spacing * sqrt(maxi(count, 1))
 
 
-## 계열 효과 같은 상태 변화로 병사 색을 바꾼다.
+## 계열 효과 같은 상태 변화로 병사 색을 바꾼다. 밝기 보정은 유지한다.
 func set_color(color: Color) -> void:
-	(material_override as StandardMaterial3D).albedo_color = color
+	_base_color = color
+	_apply_color()
+
+
+## 기본 색은 그대로 두고 밝기만 올린다. 0이면 원래 색이다.
+func set_brightness(amount: float) -> void:
+	_brightness = amount
+	_apply_color()
+
+
+func _apply_color() -> void:
+	(material_override as StandardMaterial3D).albedo_color = _base_color.lightened(_brightness)
 
 
 func _rebuild() -> void:

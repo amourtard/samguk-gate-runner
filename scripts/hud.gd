@@ -7,6 +7,8 @@ extends CanvasLayer
 @onready var _strip_empty: Label = %StripEmpty
 @onready var _status_label: Label = %StatusLabel
 @onready var _popup_root: Control = %PopupRoot
+# 피해 숫자는 병력 수와 변화량 팝업보다 아래 층에 그려 가리지 않게 한다
+@onready var _damage_root: Control = %DamageRoot
 
 var _army: Army
 var _units: Dictionary
@@ -17,11 +19,15 @@ var _pop_scale: float
 var _delta_duration: float
 var _delta_rise: float
 var _count_tween: Tween
+var _damage_data: Dictionary
+var _damage_color: Color
 
 
 func setup(army: Army, units: Dictionary, tuning: Dictionary) -> void:
 	_army = army
 	_units = units
+	_damage_data = tuning["damage_number"]
+	_damage_color = Color.html(_damage_data["color"])
 	_pop_duration = float(tuning["number_popup"]["duration"])
 	_pop_scale = float(tuning["number_popup"]["scale"])
 	_delta_duration = float(tuning["delta_popup"]["duration"])
@@ -95,6 +101,25 @@ func show_delta(text: String, screen_pos: Vector2, color: Color) -> void:
 	tween.tween_property(popup, "position:y", popup.position.y - _delta_rise, _delta_duration)
 	tween.tween_property(popup, "modulate:a", 0.0, _delta_duration)
 	tween.chain().tween_callback(popup.queue_free)
+
+
+## 피해 숫자를 작은 글자로 띄우고 위로 올리며 사라지게 한다. 표시 배율은 호출하는 쪽이 곱한다.
+func show_damage(value: int, screen_pos: Vector2) -> void:
+	var label := Label.new()
+	label.text = str(value)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", int(_damage_data["font_size"]))
+	label.add_theme_constant_override("outline_size", int(_damage_data["outline_size"]))
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.modulate = _damage_color
+	_damage_root.add_child(label)
+	label.reset_size()
+	label.position = screen_pos - label.size / 2.0
+	var duration := float(_damage_data["duration"])
+	var tween := label.create_tween().set_parallel()
+	tween.tween_property(label, "position:y", label.position.y - float(_damage_data["rise"]), duration)
+	tween.tween_property(label, "modulate:a", 0.0, duration)
+	tween.chain().tween_callback(label.queue_free)
 
 
 func _on_army_changed() -> void:

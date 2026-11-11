@@ -30,6 +30,33 @@
 	"hud": {
 		"count_label_height": 1.2
 	},
+	"display_damage_multiplier": 100,
+	"damage_number": {
+		"interval": 0.5,
+		"font_size": 40,
+		"outline_size": 10,
+		"duration": 0.6,
+		"rise": 70,
+		"height": 1.5,
+		"scatter": 1.2,
+		"color": "#fff4d6"
+	},
+	"hero_skill_view": {
+		"flash_time": 0.3,
+		"alpha": 0.45,
+		"lift": 0.04,
+		"line_width": 1.6,
+		"pulse_radius": 6,
+		"guard_margin": 0.5,
+		"brighten": 0.35,
+		"strike_numbers": { "min": 5, "max": 8, "weight_min": 0.5, "weight_max": 1.5 }
+	},
+	"endless": {
+		"enemy_total_mult": 1.15,
+		"boss_health_mult": 1.2,
+		"max_unit_ratio": 0.7,
+		"bridge_chance": 0.3
+	},
 	"sfx": {
 		"volume_db": -6,
 		"min_interval": { "gate": 0, "arrow": 0.25, "hit": 0.2 }

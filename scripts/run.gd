@@ -71,6 +71,15 @@ var _choosing := false
 # 화면 흔들림 남은 시간
 var _shake_time := 0.0
 
+# 평소 교전 피해 숫자. 앞 적 무리(보스 포함)에 준 피해를 모았다가 정해진 간격마다 하나로 띄운다
+var _damage_accum := 0.0
+var _damage_timer := 0.0
+var _display_damage_mult: float
+
+# 장수 기술 표시
+var _skill_view: HeroSkillView
+var _focus_lit := false
+
 
 func _ready() -> void:
 	_tuning = DataDb.table("tuning")
@@ -111,6 +120,10 @@ func _ready() -> void:
 	_hud.setup(army, _units, _tuning)
 	_sfx.setup(_tuning)
 	_arrow_view.setup(_tuning)
+	_display_damage_mult = float(_tuning["display_damage_multiplier"])
+	_skill_view = HeroSkillView.new()
+	add_child(_skill_view)
+	_skill_view.setup(_tuning)
 
 	# 아군 뒤쪽 위에서 지정 각도로 내려다본다
 	var camera_data: Dictionary = _tuning["camera"]
@@ -246,6 +259,7 @@ func _process(delta: float) -> void:
 
 	_army_position.x = move_toward(_army_position.x, _target_x, float(_tuning["lateral_max_speed"]) * delta)
 	_army_view.position = _army_position
+	_update_skill_view()
 	_road_view.follow(_army_position.z)
 	_update_camera()
 	_check_gates()
@@ -265,10 +279,15 @@ func _run_combat(delta: float) -> void:
 		_combat = Combat.new(army, group.pools, _units, _tuning, int(_tuning[limit_key]), _strategy)
 		_tick_accum = 0.0
 
+	_damage_timer += delta
+	if _damage_timer >= float(_tuning["damage_number"]["interval"]):
+		_flush_damage_number()
+
 	_tick_accum += delta
 	while _tick_accum >= _tick_interval:
 		_tick_accum -= _tick_interval
 		var events := _combat.tick(_tick_interval, _gap_to_front_enemy())
+		_damage_accum += float(events["damage_dealt"])
 		if events["contact_started"]:
 			print("접촉: 아군 ", army.count, " / 적 ", _combat.enemy_count())
 			_shake_time = float(_tuning["screen_shake_duration"])
@@ -287,6 +306,8 @@ func _run_combat(delta: float) -> void:
 
 
 func _on_enemy_group_defeated() -> void:
+	# 전멸시킨 마지막 피해도 사라지기 전에 띄운다
+	_flush_damage_number()
 	var group: EnemyGroup = _enemy_groups.pop_front()
 	print("적 무리 전멸. 남은 아군 ", army.count)
 	_combat = null
@@ -305,8 +326,13 @@ func _run_hero_skill(delta: float) -> void:
 	if not events["activated"]:
 		return
 	if float(events["strike_damage"]) > 0.0 and _combat != null:
-		_combat.deal_direct_damage(float(events["strike_damage"]))
+		var dealt := _combat.deal_direct_damage(float(events["strike_damage"]))
 		_shake_time = float(_tuning["screen_shake_duration"])
+		var group := _enemy_groups[0]
+		_skill_view.show_strike(_army_position - Vector3(0.0, 0.0, _army_radius()), group.global_position)
+		_show_strike_numbers(dealt, group)
+	if _hero.skill_type() == "focus":
+		_skill_view.show_pulse(_army_position)
 	_hud.show_delta("%s 기술" % _hero.name, _count_anchor(), Color.html(_tuning["colors"]["hero_skill"]))
 	print("%s 기술 발동" % _hero.name)
 
@@ -461,6 +487,56 @@ func _show_arrows(events: Dictionary) -> void:
 		for pool in group.pools:
 			if pool.is_alive() and float(_units[pool.unit_type]["range"]) > 0.0:
 				_arrow_view.fire("enemy_" + pool.unit_type, group.pool_center(pool.unit_type), _army_position)
+
+
+## 모은 피해를 표시 배율을 곱해 앞 적 무리 위에 하나로 띄운다.
+func _flush_damage_number() -> void:
+	_damage_timer = 0.0
+	var value := roundi(_damage_accum * _display_damage_mult)
+	_damage_accum = 0.0
+	if value <= 0 or _enemy_groups.is_empty():
+		return
+	_hud.show_damage(value, _damage_anchor(_enemy_groups[0].global_position))
+
+
+## 장수 공격 기술의 피해를 여러 개로 나눠 맞은 적 무리 위에 흩뿌린다. 합계는 실제 피해 × 표시 배율이다.
+func _show_strike_numbers(dealt: float, group: EnemyGroup) -> void:
+	var total := roundi(dealt * _display_damage_mult)
+	if total <= 0:
+		return
+	var range_data: Dictionary = _tuning["hero_skill_view"]["strike_numbers"]
+	var pieces := _rng.randi_range(int(range_data["min"]), int(range_data["max"]))
+	var weights: Array[float] = []
+	var weight_sum := 0.0
+	for i in pieces:
+		# 조각 크기가 너무 고르지도, 너무 작지도 않게 정해진 범위에서 뽑는다
+		var weight := _rng.randf_range(float(range_data["weight_min"]), float(range_data["weight_max"]))
+		weights.append(weight)
+		weight_sum += weight
+	var scatter := float(_tuning["damage_number"]["scatter"])
+	var shown := 0
+	for i in pieces:
+		var value := total - shown if i == pieces - 1 else roundi(total * weights[i] / weight_sum)
+		shown += value
+		if value <= 0:
+			continue
+		var offset := Vector3(_rng.randf_range(-scatter, scatter), _rng.randf_range(0.0, scatter), _rng.randf_range(-scatter, scatter))
+		_hud.show_damage(value, _damage_anchor(group.global_position + offset))
+
+
+## 적 무리 머리 위의 화면 좌표
+func _damage_anchor(world_pos: Vector3) -> Vector2:
+	return _camera.unproject_position(world_pos + Vector3.UP * float(_tuning["damage_number"]["height"]))
+
+
+## 지속형 기술 표시. 장비는 원형 도형, 제갈량은 병사 밝기를 효과가 켜진 동안 유지한다.
+func _update_skill_view() -> void:
+	var active := _hero.is_active()
+	_skill_view.set_guard(active and _hero.skill_type() == "guard", _army_position, _army_radius())
+	var lit := active and _hero.skill_type() == "focus"
+	if lit != _focus_lit:
+		_focus_lit = lit
+		_army_view.set_brightness(float(_tuning["hero_skill_view"]["brighten"]) if lit else 0.0)
 
 
 func _gap_to_front_enemy() -> float:

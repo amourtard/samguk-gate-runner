@@ -7,7 +7,7 @@ signal start_requested
 
 @onready var _hero_list: VBoxContainer = %HeroList
 @onready var _hero_template: Button = %HeroTemplate
-@onready var _stage_row: HBoxContainer = %StageRow
+@onready var _stage_row: HFlowContainer = %StageRow
 @onready var _stage_template: Button = %StageTemplate
 @onready var _start_button: Button = %StartButton
 
@@ -29,15 +29,15 @@ func _ready() -> void:
 		_hero_list.add_child(card)
 
 	var stage_group := ButtonGroup.new()
-	var stages: Array = DataDb.table("stages")["list"]
-	# 가장 최근에 열린 스테이지를 기본으로 고른다
+	# 데이터 스테이지(1-1~1-5)는 모두 보여주고, 그 뒤 자동 생성 스테이지는 열린 것만 보여준다
+	var shown_count := maxi(GameState.data_stage_count(), GameState.unlocked_stages)
 	GameState.stage_index = clampi(GameState.stage_index, 0, GameState.unlocked_stages - 1)
-	for i in stages.size():
+	for i in shown_count:
 		var button := _stage_template.duplicate() as Button
 		button.unique_name_in_owner = false
 		button.visible = true
 		button.button_group = stage_group
-		button.text = stages[i]["id"]
+		button.text = GameState.stage_at(i)["id"]
 		button.disabled = i >= GameState.unlocked_stages
 		button.button_pressed = i == GameState.stage_index
 		button.pressed.connect(func() -> void: GameState.stage_index = i)

@@ -37,11 +37,13 @@ func _init(p_ally: Army, p_enemies: Array[Army], units: Dictionary, tuning: Dict
 
 
 ## 한 번의 계산. gap은 두 무리 앞줄 사이의 거리(m)다.
-## 반환값은 연출용 사건 기록이다: contact_started, ally_fired, enemy_fired
+## 반환값은 연출용 사건 기록이다: contact_started, ally_fired, enemy_fired,
+## damage_dealt(이번 계산에서 적 무리 체력이 실제로 줄어든 양)
 func tick(dt: float, gap: float) -> Dictionary:
-	var events := {"contact_started": false, "ally_fired": false, "enemy_fired": false}
+	var events := {"contact_started": false, "ally_fired": false, "enemy_fired": false, "damage_dealt": 0.0}
 	if is_finished():
 		return events
+	var enemy_health_before := _enemy_health()
 
 	# 연환은 이번 계산을 시작할 때 지속 피해가 걸려 있었는지로 판단한다
 	var chain := _strategy.chain_mult() if not _dots.is_empty() else 1.0
@@ -102,12 +104,16 @@ func tick(dt: float, gap: float) -> Dictionary:
 	_deal_to_enemies(_tick_dots(dt), false, chain)
 	# 규칙 1: 체력 합계에서 빼고 병력 수를 올림으로 다시 구한다(Army가 처리)
 	ally.take_damage(to_ally)
+	events["damage_dealt"] = enemy_health_before - _enemy_health()
 	return events
 
 
 ## 장수 기술처럼 상성 없이 정해진 피해를 앞줄부터 넣는다.
-func deal_direct_damage(amount: float) -> void:
+## 반환값은 적 무리 체력이 실제로 줄어든 양이다.
+func deal_direct_damage(amount: float) -> float:
+	var before := _enemy_health()
 	_deal_to_enemies(amount, false, 1.0)
+	return before - _enemy_health()
 
 
 func is_enemy_defeated() -> bool:
@@ -124,6 +130,13 @@ func is_ally_defeated() -> bool:
 
 func is_finished() -> bool:
 	return is_enemy_defeated() or is_ally_defeated()
+
+
+func _enemy_health() -> float:
+	var total := 0.0
+	for pool in enemies:
+		total += pool.total_health
+	return total
 
 
 func enemy_count() -> int:

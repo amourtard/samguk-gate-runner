@@ -60,6 +60,11 @@ func is_active() -> bool:
 	return _active_left > 0.0
 
 
+## 기술 종류: strike, guard, focus
+func skill_type() -> String:
+	return _skill["type"]
+
+
 func _apply_buff(army: Army, on: bool) -> void:
 	match _skill["type"]:
 		"guard":

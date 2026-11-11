@@ -104,10 +104,11 @@ theme_override_font_sizes/font_size = 56
 text = "스테이지"
 horizontal_alignment = 1
 
-[node name="StageRow" type="HBoxContainer" parent="Margin/Box"]
+[node name="StageRow" type="HFlowContainer" parent="Margin/Box"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/separation = 16
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 16
 alignment = 1
 
 [node name="StageTemplate" type="Button" parent="Margin/Box/StageRow"]
