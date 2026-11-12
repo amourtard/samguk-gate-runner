@@ -66,6 +66,12 @@ func _ready() -> void:
 	blink.tween_property(prompt, "modulate:a", float(_ui["prompt_min_alpha"]), float(_ui["prompt_blink"]))
 	blink.tween_property(prompt, "modulate:a", 1.0, float(_ui["prompt_blink"]))
 
+	# 플레이 기록을 모은다는 것을 알린다
+	var notice := _label(_ui["notice"], int(_ui["notice_font_size"]), Color.html(_ui["notice_color"]), int(_ui["notice_outline"]))
+	notice.position = Vector2(0.0, view_size.y * float(_ui["notice_y"]))
+	notice.size = Vector2(view_size.x, 0.0)
+	add_child(notice)
+
 	# 화면 어디를 눌러도 시작한다
 	var button := Button.new()
 	button.flat = true

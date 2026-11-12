@@ -76,6 +76,11 @@ var _boss_height := 0.0
 # 불덩이가 떨어질 자리를 예고하는 바닥 표시(던진 순서대로)
 var _boss_targets: Array[Node3D] = []
 var _field_view: FieldView
+# 플레이 기록용: 지금 무리와 접촉한 시각과 그때의 병력, 보스전 집계
+var _contact_time := -1.0
+var _contact_count := 0
+var _group_enemy_count := 0
+var _boss_stats := {}
 
 # 아직 지나지 않았거나 화면에 남아 있는 게이트 쌍
 var _gate_pairs: Array[GatePair] = []
@@ -386,6 +391,7 @@ func _run_combat(delta: float) -> void:
 		return
 	if _combat == null:
 		var group := _enemy_groups[0]
+		_group_enemy_count = group.total_count()
 		# 좁은 다리 구간의 무리와는 근접 동시 교전 수가 줄어든다
 		var limit_key := "melee_engage_limit_bridge" if group.section == _bridge_section else "melee_engage_limit"
 		# 보스는 몸집이 커서 더 많은 병사가 둘러싸고 싸운다
@@ -409,6 +415,8 @@ func _run_combat(delta: float) -> void:
 		_register_kills(enemies_before - _combat.enemy_count())
 		_damage_accum += float(events["damage_dealt"])
 		if events["contact_started"]:
+			_contact_time = _elapsed
+			_contact_count = army.count
 			print("접촉: 아군 ", army.count, " / 적 ", _combat.enemy_count())
 			_shake_time = float(_tuning["screen_shake_duration"])
 			# 접촉 순간 터지는 책략을 적 무리 위에 띄운다
@@ -440,6 +448,17 @@ func _on_enemy_group_defeated() -> void:
 	_flush_damage_number()
 	var group: EnemyGroup = _enemy_groups.pop_front()
 	print("적 무리 전멸. 남은 아군 ", army.count)
+	if not group.is_boss:
+		# 접촉 없이 화살만으로 잡았으면 접촉 시간은 -1로 남는다
+		Telemetry.track("group_end", {
+			"section": group.section,
+			"enemies": _group_enemy_count,
+			"before": _contact_count if _contact_time >= 0.0 else army.count,
+			"after": army.count,
+			"contact_seconds": snappedf(_elapsed - _contact_time, 0.01) if _contact_time >= 0.0 else -1.0,
+			"unit": army.unit_type,
+		})
+	_contact_time = -1.0
 	_combat = null
 	if group.is_boss:
 		_boss_view.hide_warning()
@@ -534,6 +553,7 @@ func _run_boss_pattern(delta: float) -> void:
 		_boss_group.set_color(Color.html(view["enrage_color"]))
 		Sound.set_music_pitch(float(view["enrage_music_pitch"]))
 		Sound.play("boss_enrage")
+		_boss_stats["enraged"] = true
 		_shake_time = float(_kill_fx["wipe_shake_time"])
 		_shake_mult = float(_kill_fx["wipe_shake_mult"])
 	if int(events["warn_started"]) >= 0:
@@ -553,7 +573,9 @@ func _run_boss_pattern(delta: float) -> void:
 		_shake_mult = float(_kill_fx["wipe_shake_mult"])
 		_freeze_left = float(_kill_fx["wipe_freeze"])
 		Sound.play("boss_lightning")
+		_boss_stats["zones"] = int(_boss_stats.get("zones", 0)) + 1
 		if events["hit"]:
+			_boss_stats["zone_hits"] = int(_boss_stats.get("zone_hits", 0)) + 1
 			_hud.show_delta("%+d" % (army.count - before), _count_anchor(), Color.html(_tuning["colors"]["enemy"]))
 			print("보스 공격 적중: ", before, " → ", army.count)
 		else:
@@ -575,7 +597,9 @@ func _run_boss_pattern(delta: float) -> void:
 			(_boss_targets.pop_front() as Node3D).queue_free()
 		_fx.burst("boss_hit", Vector3(float(landing["x"]), 1.0, center_z), Color(0, 0, 0, 0), float(boss["normal_radius"]))
 		Sound.play("boss_fireball_hit")
+		_boss_stats["fireballs"] = int(_boss_stats.get("fireballs", 0)) + 1
 		if int(landing["lost"]) > 0:
+			_boss_stats["fireball_hits"] = int(_boss_stats.get("fireball_hits", 0)) + 1
 			Sound.play("ally_die")
 			_shake_time = float(_tuning["screen_shake_duration"])
 			_hud.show_delta("-%d" % int(landing["lost"]), _count_anchor(), Color.html(_tuning["colors"]["enemy"]))
@@ -601,6 +625,7 @@ func _open_strategy_choice() -> void:
 func _on_strategy_chosen(id: String, offer: Array[String]) -> void:
 	var before := army.count
 	Sound.play("strategy_pick")
+	Telemetry.track("strategy_pick", {"number": _pick_number, "chosen": id, "offer": offer})
 	var new_family := _strategy.add(id, army)
 	var not_chosen := PackedStringArray()
 	for other in offer:
@@ -619,6 +644,13 @@ func _on_strategy_chosen(id: String, offer: Array[String]) -> void:
 	# 다 골랐으면 출발한다
 	_choosing = false
 	Sound.play("start_horn")
+	Telemetry.begin_run(_stage_id, GameState.hero_id, {
+		"count": army.count,
+		"unit": army.unit_type,
+		"strategies": _strategy.owned,
+		"upgrades": GameState.upgrade_levels,
+		"stage_index": GameState.stage_index,
+	})
 	_hud.set_overlay_hidden(false)
 	# 게이트 글자는 다음 프레임에 거리 규칙으로 다시 켜진다
 	_hero_view.set_flag_text_visible(true)
@@ -636,6 +668,8 @@ func _enter_next_section() -> void:
 		Sound.play_music("boss", Sound.music_volume())
 		# 보스 구간에서는 죽은 아군 병사도 튕겨 날아간다
 		_army_view.set_death_fly(_visual["soldier"]["death_fly"])
+		_boss_stats = {"start": _elapsed, "count": army.count, "unit": army.unit_type, "zones": 0, "zone_hits": 0, "fireballs": 0, "fireball_hits": 0, "enraged": false}
+		Telemetry.track("boss_start", {"count": army.count, "unit": army.unit_type, "time": snappedf(_elapsed, 0.1)})
 	_start_section()
 
 
@@ -675,6 +709,7 @@ func _check_gates() -> void:
 			var before := army.count
 			var result := Gate.apply(army, spec, _gates, _units, _rng, _strategy)
 			_pick_log.write("gate", _section, _gate_id(spec), _gate_id(other), army.unit_type, before, army.count, _strategy.owned)
+			Telemetry.track("gate", {"section": _section, "chosen": _gate_id(spec), "other": _gate_id(other), "unit": army.unit_type, "before": before, "after": army.count, "time": snappedf(_elapsed, 0.1)})
 			_bonus_gold += int(result["gold"])
 			_sfx.play("gate")
 			var color := Color.html(_gates[spec["type"]]["color"]).lightened(float(_tuning["delta_popup"]["lighten"]))
@@ -739,6 +774,30 @@ func _finish(cleared: bool) -> void:
 	_hide_world_text()
 	print("돌파" if cleared else "패배")
 	_pick_log.write("result", mini(_section, _section_count + 1), "clear" if cleared else "lose", "", army.unit_type, army.count, army.count, _strategy.owned)
+	if _boss_stats.has("start"):
+		Telemetry.track("boss_end", {
+			"cleared": cleared,
+			"seconds": snappedf(_elapsed - float(_boss_stats["start"]), 0.1),
+			"count_start": _boss_stats["count"],
+			"count_end": army.count,
+			"unit": army.unit_type,
+			"zones": _boss_stats["zones"],
+			"zone_hits": _boss_stats["zone_hits"],
+			"fireballs": _boss_stats["fireballs"],
+			"fireball_hits": _boss_stats["fireball_hits"],
+			"enraged": _boss_stats["enraged"],
+		})
+	Telemetry.end_run({
+		"cleared": cleared,
+		"section": mini(_section, _section_count + 1),
+		"sections": _section_count,
+		"count": army.count,
+		"unit": army.unit_type,
+		"kills": _kills,
+		"seconds": snappedf(_elapsed, 0.1),
+		"bonus_gold": _bonus_gold,
+		"strategies": _strategy.owned,
+	})
 	_update_hud()
 	finished.emit({
 		"cleared": cleared,

@@ -120,6 +120,7 @@ func _make_card(id: String, entry: Dictionary) -> PanelContainer:
 func _on_buy(id: String) -> void:
 	if GameState.buy_upgrade(id):
 		Sound.play("upgrade")
+		Telemetry.track("upgrade_buy", {"id": id, "level": GameState.upgrade_level(id), "gold_left": GameState.gold})
 		_refresh()
 
 

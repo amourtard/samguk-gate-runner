@@ -92,6 +92,7 @@ func _on_run_finished(result: Dictionary) -> void:
 
 
 func _on_result_action(action: String) -> void:
+	Telemetry.track("result_action", {"action": action})
 	match action:
 		"next":
 			GameState.stage_index += 1

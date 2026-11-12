@@ -23,6 +23,7 @@ boot_splash/fullsize=false
 DataDb="*res://scripts/data_db.gd"
 GameState="*res://scripts/game_state.gd"
 Sound="*res://scripts/sound.gd"
+Telemetry="*res://scripts/telemetry.gd"
 
 [display]
 

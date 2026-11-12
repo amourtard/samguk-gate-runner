@@ -66,6 +66,16 @@
 		"max_unit_ratio": 0.7,
 		"bridge_chance": 0.3
 	},
+	"telemetry": {
+		"enabled": true,
+		"endpoint": "/api/log",
+		"build": "proto-2026-11-12",
+		"flush_interval": 5,
+		"batch_size": 50,
+		"max_queue": 300,
+		"timeout": 10,
+		"local_file": false
+	},
 	"sfx": {
 		"volume_db": -6,
 		"music_volume_db": -13,

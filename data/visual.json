@@ -500,7 +500,12 @@
 		"logo": "res://assets/ui/logo.png",
 		"logo_y": 0.1,
 		"logo_width": 0.86,
-		"tagline_outline": 12
+		"tagline_outline": 12,
+		"notice": "테스트 버전: 개선을 위해 플레이 기록(선택과 결과)을\n익명으로 모읍니다. 이름이나 개인 정보는 받지 않습니다.",
+		"notice_y": 0.9,
+		"notice_font_size": 30,
+		"notice_color": "#c8ccd8",
+		"notice_outline": 8
 	},
 	"ui_skin": {
 		"margin": 24,

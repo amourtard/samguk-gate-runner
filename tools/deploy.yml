@@ -1,0 +1,71 @@
+# main에 푸시하면 Godot 웹 빌드를 만들어 deploy 브랜치에 올린다. Vercel은 deploy 브랜치를 배포한다.
+name: 웹 빌드와 배포 브랜치 갱신
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: 4.7.2
+  GODOT_RELEASE: https://github.com/godotengine/godot/releases/download/4.7.2-stable
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Godot과 웹 내보내기 틀 캐시
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot-cache
+          key: godot-${{ env.GODOT_VERSION }}-web
+
+      - name: Godot과 웹 내보내기 틀 받기
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot-cache/templates
+          cd ~/godot-cache
+          curl -sSL -o godot.zip "$GODOT_RELEASE/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q godot.zip && rm godot.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+          curl -sSL -o templates.tpz "$GODOT_RELEASE/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -q -j templates.tpz 'templates/web_nothreads_*.zip' 'templates/version.txt' -d templates
+          rm templates.tpz
+
+      - name: 내보내기 틀 설치
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          cp ~/godot-cache/templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
+
+      - name: 빌드 이름 찍기(기록에서 어느 빌드의 판인지 구분한다)
+        run: sed -i "s/\"build\": \"[^\"]*\"/\"build\": \"$(date +%F)-${GITHUB_SHA::7}\"/" data/tuning.json && grep '"build"' data/tuning.json
+
+      - name: 자원 가져오기
+        run: |
+          ~/godot-cache/godot --headless --path . --import || true
+          ~/godot-cache/godot --headless --path . --import
+
+      - name: 웹 빌드
+        run: |
+          mkdir -p out/public
+          ~/godot-cache/godot --headless --path . --export-release "Web" out/public/index.html
+          test -s out/public/index.wasm
+          test -s out/public/index.pck
+
+      - name: 서버 코드 합치기
+        run: cp -r server/. out/
+
+      - name: deploy 브랜치에 올리기
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./out
+          publish_branch: deploy
+          force_orphan: true
+          commit_message: 웹 빌드
