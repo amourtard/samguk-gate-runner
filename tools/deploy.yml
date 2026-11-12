@@ -44,7 +44,9 @@ jobs:
           cp ~/godot-cache/templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
 
       - name: 빌드 이름 찍기(기록에서 어느 빌드의 판인지 구분한다)
-        run: sed -i "s/\"build\": \"[^\"]*\"/\"build\": \"$(date +%F)-${GITHUB_SHA::7}\"/" data/tuning.json && grep '"build"' data/tuning.json
+        run: |
+          sed -i "s/\"build\": \"[^\"]*\"/\"build\": \"$(date +%F)-${GITHUB_SHA::7}\"/" data/tuning.json
+          grep '"build"' data/tuning.json
 
       - name: 자원 가져오기
         run: |
