@@ -52,8 +52,15 @@ func _make_card(id: String, strategy: Strategy) -> Button:
 	card.custom_minimum_size = Vector2(0, _card_height)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.focus_mode = Control.FOCUS_NONE
-	var normal := _card_style(color, Color.html(_ui["card_back"]), activates)
-	var hover := _card_style(color, Color.html(_ui["card_back_hover"]), activates)
+	var normal: StyleBox = _card_style(color, Color.html(_ui["card_back"]), activates)
+	var hover: StyleBox = _card_style(color, Color.html(_ui["card_back_hover"]), activates)
+	# 계열별 테두리 그림이 있으면 그것을 쓴다
+	var border_path := str(_ui["border_texture"]) % family
+	if UiText.texture(border_path) != null:
+		normal = UiText.texture_box(border_path, float(_ui["border_texture_margin"]))
+		var light := Color.WHITE * float(_ui["border_texture_hover"])
+		light.a = 1.0
+		hover = UiText.texture_box(border_path, float(_ui["border_texture_margin"]), light)
 	card.add_theme_stylebox_override("normal", normal)
 	card.add_theme_stylebox_override("hover", hover)
 	card.add_theme_stylebox_override("pressed", hover)
@@ -70,7 +77,12 @@ func _make_card(id: String, strategy: Strategy) -> Button:
 	box.add_theme_constant_override("separation", 14)
 	card.add_child(box)
 
-	var icon := _icon(family, color, float(_ui["card_icon_size"]))
+	# 책략 그림이 있으면 그림을, 없으면 계열 아이콘을 둔다
+	var art := UiText.texture(str(_ui["art_dir"]) + id + ".png")
+	var icon := _icon(family, color, float(_ui["card_art_size"] if art != null else _ui["card_icon_size"]))
+	if art != null:
+		icon.texture = art
+		icon.modulate = Color.WHITE
 	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	box.add_child(icon)
 	box.add_child(_label(strategy.display_name(id), int(_ui["name_font_size"]), Color.WHITE))

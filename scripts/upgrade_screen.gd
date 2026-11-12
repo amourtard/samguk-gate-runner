@@ -18,6 +18,7 @@ func _ready() -> void:
 	back.color = Color.html(_ui["back"])
 	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(back)
+	UiText.add_backdrop(self, "upgrade", 1)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -51,6 +52,7 @@ func _ready() -> void:
 	close.custom_minimum_size = Vector2(0, float(_ui["close_height"]))
 	close.add_theme_font_size_override("font_size", int(_ui["close_font_size"]))
 	style_button(close, Color.html(_ui["close_button"]), Color.html(_ui["close_text"]), int(_ui["corner"]))
+	UiText.skin_button(close, "secondary")
 	close.pressed.connect(_on_close)
 	box.add_child(close)
 
@@ -117,6 +119,7 @@ func _make_card(id: String, entry: Dictionary) -> PanelContainer:
 
 func _on_buy(id: String) -> void:
 	if GameState.buy_upgrade(id):
+		Sound.play("upgrade")
 		_refresh()
 
 
@@ -141,6 +144,9 @@ func _refresh() -> void:
 		style_button(button,
 			Color.html(_ui["buy_button"] if affordable else _ui["buy_disabled"]),
 			Color.html(_ui["buy_text"] if affordable else _ui["buy_disabled_text"]), int(_ui["corner"]))
+		# 살 수 있을 때만 금빛 테두리 그림을 입힌다. 못 살 때는 어두운 민무늬로 둔다
+		if affordable:
+			UiText.skin_button(button, "primary")
 
 
 ## 그 레벨일 때의 효과 문구. 예: "시작 병력 +4명", "공격력 +10%"

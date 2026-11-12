@@ -3,7 +3,7 @@ extends MultiMeshInstance3D
 ## army.gd의 병력 수를 MultiMesh로 그린다. 계산 결과를 그리기만 한다.
 ## 표시 대형은 계산 대형보다 넓게 펼치되, 앞줄(교전이 일어나는 면)은 계산 위치에 맞춘다.
 ## 표시 대형의 폭은 도로 폭의 일정 비율을 넘지 않고, 넘는 인원은 뒤쪽으로 길게 세운다.
-## 병사가 줄면 빠진 병사를 짧게 작아지며 사라지게 한다.
+## 병사가 줄면 빠진 병사를 짧게 작아지며 사라지게 한다. 적 무리는 뒤쪽 위로 튕겨 날아가게 할 수 있다.
 
 # 해바라기 배치용 황금각(라디안)
 const GOLDEN_ANGLE := PI * (3.0 - sqrt(5.0))
@@ -30,8 +30,10 @@ var _unit_type := ""
 var _alive_transforms: Array[Transform3D] = []
 # 표시 대형 중심의 앞뒤 위치(노드 기준)
 var _center_z := 0.0
-# 사라지는 병사: {"transform": 원래 변환, "t": 지난 시간}
+# 사라지는 병사: {"transform": 원래 변환, "t": 지난 시간}. 날아가는 병사는 "velocity", "axis", "spin"이 더 있다
 var _dying: Array[Dictionary] = []
+# 죽은 병사를 날려 보내는 설정(visual.json의 soldier.death_fly). 비어 있으면 제자리에서 작아진다
+var _death_fly := {}
 
 
 func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary, color: Color, facing: float, bob_height: float, fixed_front_radius := -1.0) -> void:
@@ -100,6 +102,17 @@ func set_max_width_ratio(ratio: float) -> void:
 	_rebuild()
 
 
+## 죽은 병사가 뒤쪽 위로 튕겨 날아가게 한다. 표시만 바뀌고 계산과는 무관하다.
+func set_death_fly(data: Dictionary) -> void:
+	_death_fly = data
+	_death_time = float(data["time"])
+
+
+## 달릴 때의 위아래 흔들림 높이를 바꾼다(적 무리가 서 있다가 달려올 때).
+func set_bob(height: float) -> void:
+	_material.set_shader_parameter("bob_height", height)
+
+
 ## 계열 효과 같은 상태 변화로 병사 색을 바꾼다. 밝기 보정은 유지한다.
 func set_color(color: Color) -> void:
 	_base_color = color
@@ -139,7 +152,17 @@ func _rebuild() -> void:
 	var shown := mini(_army.count, _display_limit)
 	# 줄어든 만큼 바깥쪽 병사를 사라지는 목록으로 옮긴다
 	for i in range(shown, _alive_transforms.size()):
-		_dying.append({"transform": _alive_transforms[i], "t": 0.0})
+		var entry := {"transform": _alive_transforms[i], "t": 0.0}
+		if not _death_fly.is_empty():
+			# 보는 방향의 반대쪽(맞은 방향)으로, 위로, 조금씩 다른 세기로 튕긴다
+			var back: Array = _death_fly["back_speed"]
+			var up: Array = _death_fly["up_speed"]
+			var spin: Array = _death_fly["spin_speed"]
+			var side := float(_death_fly["side_speed"])
+			entry["velocity"] = Vector3(randf_range(-side, side), randf_range(float(up[0]), float(up[1])), -_facing * randf_range(float(back[0]), float(back[1])))
+			entry["axis"] = Vector3(randf_range(-1.0, 1.0), randf_range(-0.3, 0.3), randf_range(-1.0, 1.0)).normalized()
+			entry["spin"] = randf_range(float(spin[0]), float(spin[1]))
+		_dying.append(entry)
 	while _dying.size() > _display_limit:
 		_dying.pop_front()
 
@@ -181,8 +204,17 @@ func _write_dying() -> void:
 	var start := _alive_transforms.size()
 	for k in _dying.size():
 		var entry: Dictionary = _dying[k]
-		var shrink := clampf(1.0 - float(entry["t"]) / _death_time, 0.0, 1.0)
+		var t := float(entry["t"])
+		var shrink := clampf(1.0 - t / _death_time, 0.0, 1.0)
 		var transform: Transform3D = entry["transform"]
+		if entry.has("velocity"):
+			# 포물선으로 날아가며 돌고, 끝날 무렵에만 작아진다
+			var velocity: Vector3 = entry["velocity"]
+			transform.origin += velocity * t + Vector3.DOWN * (float(_death_fly["gravity"]) * t * t / 2.0)
+			transform.origin.y = maxf(transform.origin.y, 0.0)
+			transform.basis = Basis(entry["axis"] as Vector3, float(entry["spin"]) * t) * transform.basis
+			var shrink_start := float(_death_fly["shrink_start"])
+			shrink = clampf((1.0 - t / _death_time) / (1.0 - shrink_start), 0.0, 1.0)
 		transform.basis = transform.basis.scaled(Vector3.ONE * maxf(shrink, 0.001))
 		multimesh.set_instance_transform(start + k, transform)
 		multimesh.set_instance_custom_data(start + k, Color(fposmod((start + k) * PHASE_STEP, 1.0), 0.0, 0.0, 0.0))
@@ -202,5 +234,5 @@ func _facing_basis() -> Basis:
 
 func _get_mesh(unit_type: String) -> Mesh:
 	if not _mesh_cache.has(unit_type):
-		_mesh_cache[unit_type] = ModelBuilder.build(_visual["models"][unit_type])
+		_mesh_cache[unit_type] = ModelBuilder.model(unit_type, _visual)
 	return _mesh_cache[unit_type]

@@ -2,10 +2,12 @@
 	"camera": {
 		"pitch_deg": 30,
 		"fov": 50,
-		"army_screen_y": 0.62,
-		"distance_base": 7.6,
+		"army_screen_y": 0.7,
+		"distance_base": 9.0,
 		"distance_per_radius": 1.35,
-		"follow_rate": 3.0
+		"follow_rate": 3.0,
+		"boss_distance_mult": 1.3,
+		"boss_follow_x": 0.5
 	},
 	"formation": {
 		"count_small": 16,
@@ -18,6 +20,15 @@
 		"bob_speed": 13.0,
 		"enemy_bob_height": 0.0,
 		"death_time": 0.2,
+		"death_fly": {
+			"time": 0.6,
+			"back_speed": [3.0, 7.0],
+			"up_speed": [4.5, 8.0],
+			"side_speed": 2.5,
+			"gravity": 18.0,
+			"spin_speed": [5.0, 13.0],
+			"shrink_start": 0.55
+		},
 		"skin": "#e8c39e"
 	},
 	"models": {
@@ -75,26 +86,40 @@
 			{ "shape": "cylinder", "top": 0.0, "bottom": 0.05, "height": 0.18, "pos": [0.22, 1.64, -1.062], "rot": [-60, 0, 0], "color": "#dcdcdc", "segments": 5 }
 		]
 	},
+	"model_files": {
+		"infantry": "res://assets/models/infantry.glb",
+		"archer": "res://assets/models/archer.glb",
+		"cavalry": "res://assets/models/cavalry.glb",
+		"boss": "res://assets/models/boss_zhang_jiao.glb",
+		"hero_guan_yu": "res://assets/models/guan_yu.glb",
+		"hero_zhang_fei": "res://assets/models/zhang_fei.glb",
+		"hero_zhuge_liang": "res://assets/models/zhuge_liang.glb",
+		"prop_pine": "res://assets/models/prop_pine.glb",
+		"prop_round_tree": "res://assets/models/prop_tree.glb",
+		"prop_rock": "res://assets/models/prop_rock.glb",
+		"prop_flag": "res://assets/models/prop_flag.glb",
+		"castle_gate": "res://assets/models/prop_castle_gate.glb"
+	},
 	"model_scale": {
 		"boss": 3.4,
-		"arrow": 1.5
+		"arrow": 2.4
 	},
 	"hero": {
 		"scale": 2.0,
 		"ahead_front": 0.6,
 		"colors": { "guan_yu": "#2f9e5c", "zhang_fei": "#34343c", "zhuge_liang": "#d8d2ee" },
-		"flag_text": { "guan_yu": "관", "zhang_fei": "장", "zhuge_liang": "제갈" },
+		"flag_text": { "guan_yu": "관우", "zhang_fei": "장비", "zhuge_liang": "제갈량" },
 		"flag_text_color": "#ffffff",
 		"flag_text_outline": "#000000",
-		"flag_font_size": 96,
+		"flag_font_size": 80,
 		"flag_outline_size": 28,
 		"flag_pixel_size": 0.003,
 		"flag": [
 			{ "shape": "cylinder", "top": 0.025, "bottom": 0.025, "height": 1.5, "pos": [0.05, 1.2, 0.24], "color": "#6b4a2e", "segments": 5 },
-			{ "shape": "box", "size": [0.5, 0.38, 0.03], "pos": [-0.22, 1.75, 0.24], "team": 1.0 }
+			{ "shape": "box", "size": [0.86, 0.38, 0.03], "pos": [-0.4, 1.75, 0.24], "team": 1.0 }
 		],
-		"flag_text_pos": [-0.22, 1.75, 0.26],
-		"flag_text_front_pos": [-0.22, 1.75, 0.22]
+		"flag_text_pos": [-0.4, 1.75, 0.26],
+		"flag_text_front_pos": [-0.4, 1.75, 0.22]
 	},
 	"props": {
 		"segment": 10,
@@ -135,13 +160,20 @@
 		}
 	},
 	"sky": {
+		"backdrop": "res://assets/env/sky_mountains.png",
+		"backdrop_width": 420,
+		"backdrop_distance": 190,
+		"backdrop_bottom": -70,
 		"top": "#4f86d0",
 		"horizon": "#d6e6f0",
 		"ground_horizon": "#d6e6f0",
 		"ground_bottom": "#d6e6f0",
 		"fog_color": "#d6e6f0",
 		"fog_begin": 55,
-		"fog_end": 165
+		"fog_end": 165,
+		"tonemap_filmic": false,
+		"saturation": 1.15,
+		"contrast": 1.0
 	},
 	"light": {
 		"pitch_deg": -52,
@@ -153,6 +185,12 @@
 		"ambient_color": "#ffffff"
 	},
 	"ground": {
+		"road_texture": "res://assets/env/road_dirt.png",
+		"road_tint": "#ffffff",
+		"road_tile_m": 6,
+		"grass_texture": "res://assets/env/grass_field.png",
+		"grass_tint": "#ffffff",
+		"grass_tile_m": 9,
 		"road_a": "#9a7d58",
 		"road_b": "#806548",
 		"grass_a": "#80946a",
@@ -199,10 +237,10 @@
 		"flash_color": "#ffffff"
 	},
 	"arrow": [
-		{ "shape": "cylinder", "top": 0.018, "bottom": 0.018, "height": 0.7, "pos": [0, 0, 0], "rot": [-90, 0, 0], "color": "#7a5532", "segments": 4 },
-		{ "shape": "cylinder", "top": 0.0, "bottom": 0.05, "height": 0.16, "pos": [0, 0, -0.42], "rot": [-90, 0, 0], "color": "#d8d8d8", "segments": 4 },
-		{ "shape": "box", "size": [0.012, 0.09, 0.16], "pos": [0, 0, 0.3], "color": "#f0ead8" },
-		{ "shape": "box", "size": [0.09, 0.012, 0.16], "pos": [0, 0, 0.3], "color": "#f0ead8" }
+		{ "shape": "cylinder", "top": 0.035, "bottom": 0.035, "height": 0.7, "pos": [0, 0, 0], "rot": [-90, 0, 0], "color": "#fff1b8", "segments": 4 },
+		{ "shape": "cylinder", "top": 0.0, "bottom": 0.08, "height": 0.2, "pos": [0, 0, -0.44], "rot": [-90, 0, 0], "color": "#ffffff", "segments": 4 },
+		{ "shape": "box", "size": [0.02, 0.14, 0.18], "pos": [0, 0, 0.3], "color": "#e0524a" },
+		{ "shape": "box", "size": [0.14, 0.02, 0.18], "pos": [0, 0, 0.3], "color": "#e0524a" }
 	],
 	"clash": {
 		"per_tick": 3,
@@ -239,6 +277,8 @@
 		"beam_color": "#4f3420"
 	},
 	"boss_view": {
+		"portrait": "res://assets/portraits/zhang_jiao.png",
+		"portrait_size": 84,
 		"warn_alpha_start": 0.08,
 		"flash_color": "#fff2e0e6",
 		"flash_time": 0.3,
@@ -247,7 +287,27 @@
 		"strip_bar_height": 34,
 		"strip_bar_back": "#00000099",
 		"strip_bar_fill": "#e04444",
-		"strip_bar_font_size": 30
+		"strip_bar_font_size": 30,
+		"orb_radius": 0.5,
+		"orb_color": "#ffd84a",
+		"orb_arc": 3.0,
+		"orb_from_height": 0.85,
+		"target_color": "#ff3020",
+		"target_alpha": 0.55,
+		"target_start_scale": 0.25,
+		"target_lift": 0.06,
+		"bolt_count": 8,
+		"bolt_width": 0.45,
+		"bolt_height": 18,
+		"bolt_time": 0.3,
+		"bolt_color": "#fff3a0",
+		"cast_pulse": 1.08,
+		"cast_pulse_time": 0.35,
+		"enrage_color": "#c41d1d",
+		"enrage_text": "장각이 분노했다!",
+		"enrage_music_pitch": 1.08,
+		"dodge_text": "회피!",
+		"dodge_color": "#7df08a"
 	},
 	"strategy_ui": {
 		"cards_top": 0.45,
@@ -262,7 +322,7 @@
 		"corner": 24,
 		"glow_alpha": 0.6,
 		"glow_size": 18,
-		"card_icon_size": 110,
+		"card_icon_size": 110, "card_art_size": 210, "art_dir": "res://assets/strategies/", "border_texture": "res://assets/ui/card_border_%s.png", "border_texture_margin": 28, "border_texture_hover": 1.25,
 		"name_font_size": 50,
 		"family_font_size": 32,
 		"desc_font_size": 31,
@@ -306,6 +366,7 @@
 		"stage_locked": "#1a1b21",
 		"stage_locked_text": "#a3a7b5",
 		"model_back": "#465069",
+		"portrait_dir": "res://assets/portraits/",
 		"start_button": "#f2c640",
 		"start_text": "#1c1606"
 	},
@@ -326,7 +387,8 @@
 		"secondary_text": "#ffffff",
 		"minor_button": "#2a2d38",
 		"button_height": 150,
-		"button_font_size": 58
+		"button_font_size": 58,
+		"gold_sound_delay": 1.2
 	},
 	"banner": {
 		"top": 250,
@@ -355,7 +417,12 @@
 		"gauge_back": "#00000099",
 		"gauge_fill": "#ffd24a",
 		"gauge_active": "#ffffff",
-		"gauge_font_size": 34
+		"gauge_font_size": 34,
+		"kill_font_size": 46,
+		"kill_outline": 14,
+		"kill_top": 172,
+		"kill_right": 36,
+		"kill_color": "#ffe9a8"
 	},
 	"debug": {
 		"overlay_visible": false
@@ -388,5 +455,70 @@
 		"entry_font_size": 44,
 		"entry_button": "#2a2d38",
 		"entry_text": "#ffffff"
-	}
+	},
+	"kill_fx": {
+		"flash": 0.55,
+		"flash_time": 0.12,
+		"combo_window": 0.5,
+		"combo_pitch_step": 0.06,
+		"combo_pitch_steps_max": 10,
+		"count_pop_scale": 1.4,
+		"count_pop_time": 0.12,
+		"wipe_freeze": 0.06,
+		"wipe_shake_time": 0.22,
+		"wipe_shake_mult": 2.5,
+		"wipe_text": "격파!",
+		"wipe_color": "#ffd24a"
+	},
+	"particles": {
+		"dust": { "amount": 40, "lifetime": 0.8, "spread_deg": 40, "speed": [0.3, 1.2], "gravity": 0.4, "size": [0.35, 0.8], "color": "#8f7350b0", "soft": true, "texture": "res://assets/particles/smoke.png" },
+		"spark": { "pool": 4, "amount": 10, "lifetime": 0.3, "spread_deg": 75, "speed": [3.0, 7.5], "gravity": -14.0, "size": [0.22, 0.5], "color": "#fff3b0", "texture": "res://assets/particles/spark.png" },
+		"gate": { "pool": 2, "amount": 44, "lifetime": 0.75, "spread_deg": 65, "speed": [4.0, 9.5], "gravity": -13.0, "size": [0.3, 0.65], "color": "#ffffff", "texture": "res://assets/particles/spark.png" },
+		"boss_hit": { "pool": 3, "amount": 26, "lifetime": 0.5, "spread_deg": 70, "speed": [3.0, 8.0], "gravity": -14.0, "size": [0.4, 0.9], "color": "#ff8a3a", "texture": "res://assets/particles/flame.png" },
+		"boss_zone": { "pool": 2, "amount": 90, "lifetime": 0.7, "spread_deg": 45, "speed": [5.0, 12.0], "gravity": -16.0, "size": [0.4, 1.0], "color": "#fff0a0", "texture": "res://assets/particles/spark.png" },
+		"wipe": { "pool": 2, "amount": 46, "lifetime": 0.85, "spread_deg": 80, "speed": [4.0, 10.0], "gravity": -12.0, "size": [0.3, 0.7], "color": "#ffd24a", "texture": "res://assets/particles/spark.png" }
+	},
+	"title_ui": {
+		"title": "삼국지\n게이트 러너",
+		"tagline": "게이트를 골라 병력을 불려라",
+		"prompt": "터치해서 시작",
+		"back_top": "#22314f",
+		"back_bottom": "#0b0d14",
+		"title_y": 0.2,
+		"title_font_size": 170,
+		"title_color": "#f2c640",
+		"title_outline": 36,
+		"tagline_y": 0.36,
+		"tagline_font_size": 52,
+		"tagline_color": "#d8d8e0",
+		"prompt_y": 0.74,
+		"prompt_font_size": 72,
+		"prompt_outline": 16,
+		"prompt_min_alpha": 0.25,
+		"prompt_blink": 0.8,
+		"background": "res://assets/ui/title_bg.png",
+		"logo": "res://assets/ui/logo.png",
+		"logo_y": 0.1,
+		"logo_width": 0.86,
+		"tagline_outline": 12
+	},
+	"ui_skin": {
+		"margin": 24,
+		"hover_light": 1.12,
+		"pressed_dark": 0.85,
+		"disabled_tint": "#777777",
+		"buttons": {
+			"primary": { "texture": "res://assets/ui/button_primary.png", "text": "#2a1c04" },
+			"secondary": { "texture": "res://assets/ui/button_secondary.png", "text": "#ffffff" },
+			"wood": { "texture": "res://assets/ui/button_wood.png", "text": "#ffe9a8" }
+		},
+		"backgrounds": {
+			"menu": { "texture": "res://assets/ui/menu_bg.png", "dim": 0.25 },
+			"upgrade": { "texture": "res://assets/ui/upgrade_bg.png", "dim": 0.25 },
+			"result_win": { "texture": "res://assets/ui/result_win_bg.png", "dim": 0.45 },
+			"result_lose": { "texture": "res://assets/ui/result_lose_bg.png", "dim": 0.3 }
+		}
+	},
+	"transition": { "out_time": 0.14, "in_time": 0.22, "color": "#05060a" },
+	"drag_hint": { "text": "◀   좌우로 끌어서 이동   ▶", "y": 0.86, "font_size": 56, "outline": 16, "sway": 60, "sway_time": 0.7 }
 }

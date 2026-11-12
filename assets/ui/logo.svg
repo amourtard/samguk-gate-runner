@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440">
+  <defs>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff6b9"/>
+      <stop offset="100%" stop-color="#eba820"/>
+    </linearGradient>
+    <linearGradient id="subGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f5d278"/>
+    </linearGradient>
+  </defs>
+  <polygon points="60,86 900,86 865,52 95,52" fill="#2d313e" stroke="#e6be44" stroke-width="4"/>
+  <rect x="120" y="44" width="720" height="12" fill="#e6be44"/>
+  <rect x="86" y="64" width="788" height="312" rx="32" fill="#e6be44"/>
+  <rect x="96" y="74" width="768" height="292" rx="26" fill="#581a16"/>
+  <rect x="108" y="86" width="744" height="268" rx="20" fill="#261210" stroke="#ba8a30" stroke-width="3"/>
+  <line x1="160" y1="232" x2="800" y2="232" stroke="#8c5f23" stroke-width="3"/>
+  <text x="480" y="195" text-anchor="middle" font-family="Jua, sans-serif" font-size="134" fill="url(#goldGrad)" stroke="#241206" stroke-width="12" paint-order="stroke">삼국지</text>
+  <text x="480" y="322" text-anchor="middle" font-family="Jua, sans-serif" font-size="94" fill="url(#subGrad)" stroke="#1c1008" stroke-width="10" paint-order="stroke">게이트 러너</text>
+</svg>

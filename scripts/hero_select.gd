@@ -55,7 +55,10 @@ func _ready() -> void:
 		_start_button.add_theme_stylebox_override(state, style)
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		_start_button.add_theme_color_override(state, Color.html(_ui["start_text"]))
+	UiText.skin_button(_start_button, "primary")
 	_start_button.pressed.connect(func() -> void: start_requested.emit())
+	# 맨 뒤 바탕색 바로 위에 배경 그림을 깐다
+	UiText.add_backdrop(self, "menu", 1)
 	_add_upgrade_row()
 
 
@@ -84,6 +87,7 @@ func _add_upgrade_row() -> void:
 	button.custom_minimum_size = Vector2(0, float(view["entry_height"]))
 	button.add_theme_font_size_override("font_size", int(view["entry_font_size"]))
 	UpgradeScreen.style_button(button, Color.html(view["entry_button"]), Color.html(view["entry_text"]), int(view["corner"]))
+	UiText.skin_button(button, "secondary")
 	button.pressed.connect(func() -> void: upgrades_requested.emit())
 	row.add_child(button)
 	var parent := _start_button.get_parent()
@@ -112,7 +116,9 @@ func _make_hero_card(hero_id: String, hero: Dictionary, units: Dictionary) -> Bu
 	card.add_child(row)
 
 	# 달리기 화면과 같은 장수 모델(시작 병종 모델, 장수 색, 이름 깃발)을 작은 3D 화면에 그린다
-	row.add_child(_make_model_view(hero_id, hero["unit"]))
+	# 얼굴 그림이 있으면 그림을, 없으면 게임 안의 장수 모델을 보여준다
+	var portrait := _make_portrait(hero_id)
+	row.add_child(portrait if portrait != null else _make_model_view(hero_id, hero["unit"]))
 
 	var info := VBoxContainer.new()
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -152,6 +158,22 @@ func _make_hero_card(hero_id: String, hero: Dictionary, units: Dictionary) -> Bu
 	detail.modulate = Color(1, 1, 1, 0.7)
 	info.add_child(detail)
 	return card
+
+
+## 장수 얼굴 그림. 파일이 없으면 null
+func _make_portrait(hero_id: String) -> Control:
+	var path := "%s%s.png" % [str(_ui.get("portrait_dir", "")), hero_id]
+	if not ResourceLoader.exists(path):
+		return null
+	var size_data: Array = _ui["model_view_size"]
+	var picture := TextureRect.new()
+	picture.texture = load(path)
+	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	picture.custom_minimum_size = Vector2(float(size_data[0]), float(size_data[1]))
+	picture.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return picture
 
 
 ## 장수 모델 미리보기. 자기만의 3D 세계를 가진 작은 화면에 카메라, 빛, 장수 모델을 둔다

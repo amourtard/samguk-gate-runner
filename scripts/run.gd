@@ -10,6 +10,7 @@ const EnemyGroupScene := preload("res://scenes/enemy_group.tscn")
 const BossScene := preload("res://scenes/boss.tscn")
 const GatePairScene := preload("res://scenes/gate_pair.tscn")
 const StrategyChoiceScene := preload("res://scenes/ui/strategy_choice.tscn")
+const FxViewScript := preload("res://scripts/fx_view.gd")
 
 # 확인용 병력 증감 키
 const DEBUG_ADD_KEY := KEY_UP
@@ -50,8 +51,12 @@ var _display_limit: int
 # 카메라는 아군 표시 대형 크기에 따라 물러나는 거리를 부드럽게 따라간다
 var _camera_distance := -1.0
 var _hero_view: HeroView
-# 지금 표시 대형의 최대 폭 비율. 보스 구간에 들어가면 정해진 시간에 걸쳐 좁힌다
+# 표시 대형의 최대 폭 비율
 var _width_ratio: float
+# 보스전 광장의 폭. 보스 구간에서는 좌우 이동 범위를 이 폭으로 계산한다
+var _boss_road_width: float
+# 카메라의 좌우 위치. 보스 구간에서만 아군을 조금 따라간다
+var _camera_x := 0.0
 var _skill_interval: float
 
 # 앞에서부터 차례로 상대할 적 무리(마지막이 보스)
@@ -68,6 +73,9 @@ var _boss_view: BossView
 var _boss_group: EnemyGroup
 # 보스 모델 높이. 체력 막대를 머리 위에 붙일 때 쓴다
 var _boss_height := 0.0
+# 불덩이가 떨어질 자리를 예고하는 바닥 표시(던진 순서대로)
+var _boss_targets: Array[Node3D] = []
+var _field_view: FieldView
 
 # 아직 지나지 않았거나 화면에 남아 있는 게이트 쌍
 var _gate_pairs: Array[GatePair] = []
@@ -85,8 +93,18 @@ var _choosing := false
 var _pick_number := 0
 var _pick_total := 0
 
-# 화면 흔들림 남은 시간
+# 화면 흔들림 남은 시간과 세기 배율(전멸 순간에는 평소보다 세게 흔든다)
 var _shake_time := 0.0
+var _shake_mult := 1.0
+
+# 적 처치 손맛(표시와 소리). 전투 결과에는 영향을 주지 않는다
+var _kill_fx: Dictionary
+var _kills := 0
+var _combo := 0
+var _elapsed := 0.0
+var _last_kill_time := -INF
+# 전멸 순간 게임 전체를 잠깐 멈추는 남은 시간
+var _freeze_left := 0.0
 
 # 평소 교전 피해 숫자. 앞 적 무리(보스 포함)에 준 피해를 모았다가 정해진 간격마다 하나로 띄운다
 var _damage_accum := 0.0
@@ -99,6 +117,8 @@ var _skill_view: HeroSkillView
 var _announced_section := 0
 # 근접 충돌 지점 번쩍임
 var _clash_view: ClashView
+# 파티클 연출(먼지, 불꽃, 게이트, 격파)
+var _fx: Node3D
 var _focus_lit := false
 
 
@@ -132,6 +152,7 @@ func _ready() -> void:
 	_road_width = float(_tuning["road"]["width"])
 	_spacing = float(_tuning["formation"]["spacing"])
 	_width_ratio = float(_tuning["formation_max_width_ratio"])
+	_boss_road_width = float(_tuning["boss_road_width"])
 	_display_limit = int(_tuning["soldier_display_limit"])
 	_tick_interval = float(_tuning["combat"]["tick"])
 	_gate_slowdown_enabled = bool(_tuning["gate_slowdown"]["enabled"])
@@ -142,14 +163,22 @@ func _ready() -> void:
 	_section_length = float(plan["section_length"])
 	_bridge_section = int(plan["bridge_section"])
 	_spawn_enemy_groups(plan["enemy_groups"])
-	_spawn_boss(plan["boss"])
+	# 보스전 광장: 마지막 구간이 끝나는 곳(예고 면 길이보다 멀지 않게)부터 보스 뒤까지 길을 넓힌다
+	var boss_distance := float(plan["boss"]["distance"])
+	var plaza_start := maxf(boss_distance - float(_tuning["boss"]["warn_length"]), _section_count * _section_length)
+	var plaza_end := boss_distance + float(_tuning["boss_plaza_behind"])
+	_road_view.add_plaza(plaza_start, plaza_end, _boss_road_width)
+	_add_castle_gate(plaza_end)
+	# 예고 면은 광장 안에만 깔리도록 길이를 맞춘다
+	_spawn_boss(plan["boss"], boss_distance - plaza_start)
 	_spawn_gate_pairs(plan["gate_pairs"])
 	if not (plan["bridge"] as Dictionary).is_empty():
 		_add_bridge(float(plan["bridge"]["start"]), float(plan["bridge"]["end"]))
 	var field := FieldView.new()
+	_field_view = field
 	add_child(field)
 	# 다리 구간 양옆은 물이라 길가 소품을 두지 않는다
-	var clear_ranges: Array[Vector2] = []
+	var clear_ranges: Array[Vector2] = [Vector2(plaza_start, plaza_end)]
 	if not (plan["bridge"] as Dictionary).is_empty():
 		var margin := float(_visual["bridge"]["bank"])
 		clear_ranges.append(Vector2(float(plan["bridge"]["start"]) - margin, float(plan["bridge"]["end"]) + margin))
@@ -159,12 +188,16 @@ func _ready() -> void:
 	_sfx.setup(_tuning)
 	_arrow_view.setup(_tuning, _visual)
 	_display_damage_mult = float(_tuning["display_damage_multiplier"])
+	_kill_fx = _visual["kill_fx"]
 	_skill_view = HeroSkillView.new()
 	add_child(_skill_view)
 	_skill_view.setup(_tuning, _visual)
 	_clash_view = ClashView.new()
 	add_child(_clash_view)
 	_clash_view.setup(_visual)
+	_fx = FxViewScript.new()
+	add_child(_fx)
+	_fx.setup(_visual)
 
 	# 아군 뒤쪽 위에서 지정 각도로 내려다본다. 화각은 가로 기준이다
 	_camera.keep_aspect = Camera3D.KEEP_WIDTH
@@ -191,7 +224,7 @@ func _spawn_enemy_groups(group_list: Array) -> void:
 	_enemy_groups.sort_custom(func(a: EnemyGroup, b: EnemyGroup) -> bool: return a.position.z > b.position.z)
 
 
-func _spawn_boss(boss: Dictionary) -> void:
+func _spawn_boss(boss: Dictionary, warn_length: float) -> void:
 	var group: EnemyGroup = BossScene.instantiate()
 	add_child(group)
 	group.position = Vector3(0.0, 0.0, -float(boss["distance"]))
@@ -199,9 +232,9 @@ func _spawn_boss(boss: Dictionary) -> void:
 	group.is_boss = true
 	group.setup({boss["unit"]: 1}, _units, _tuning, _visual, Color.html(_tuning["colors"]["boss"]), float(boss["health"]))
 	_boss_view = group.get_node("BossView")
-	_boss_view.setup(_tuning, _visual)
+	_boss_view.setup(_tuning, _visual, warn_length)
 	_boss_group = group
-	_boss_height = ModelBuilder.height_of(ModelBuilder.build(_visual["models"][boss["unit"]])) * ArmyView.model_scale(boss["unit"], _visual)
+	_boss_height = ModelBuilder.height_of(ModelBuilder.model(boss["unit"], _visual)) * ArmyView.model_scale(boss["unit"], _visual)
 	_enemy_groups.append(group)
 
 
@@ -213,6 +246,22 @@ func _spawn_gate_pairs(pair_list: Array) -> void:
 		pair.section = int(entry["section"])
 		pair.setup(entry["left"], entry["right"], _gates, _units, _tuning, _visual)
 		_gate_pairs.append(pair)
+
+
+## 광장 끝, 보스 뒤에 성문을 세운다. 모델 파일이 없으면 세우지 않는다.
+func _add_castle_gate(distance: float) -> void:
+	var files: Dictionary = _visual.get("model_files", {})
+	if not files.has("castle_gate"):
+		return
+	var mesh := ModelBuilder.load_file_mesh(str(files["castle_gate"]))
+	if mesh == null:
+		return
+	var gate := MeshInstance3D.new()
+	gate.mesh = mesh
+	gate.material_override = ModelBuilder.make_material(Color.WHITE)
+	gate.position = Vector3(0.0, 0.0, -distance)
+	gate.scale = Vector3.ONE * (_boss_road_width / mesh.get_aabb().size.x)
+	add_child(gate)
 
 
 ## 좁은 다리 구간을 표시한다. 나무 다리와 난간, 양옆 물을 깐다. 이름은 구간에 들어갈 때 안내 띠로 보여준다.
@@ -228,6 +277,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _finished or _choosing:
 		return
 	if event is InputEventScreenDrag:
+		# 한 번 끌어 보면 조작 안내를 지우고 다시 띄우지 않는다
+		if not GameState.seen_drag_hint:
+			GameState.seen_drag_hint = true
+			_hud.hide_drag_hint()
 		# 화면 폭 대비 드래그 거리만큼 목표 위치를 옮긴다 (상대 이동)
 		var screen_width := get_viewport().get_visible_rect().size.x
 		var meters_per_width := float(_tuning["input"]["drag_meters_per_screen_width"])
@@ -254,7 +307,13 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if _finished or _choosing:
 		return
+	# 전멸 순간의 짧은 멈춤. 아무것도 진행하지 않으므로 결과는 달라지지 않는다
+	if _freeze_left > 0.0:
+		_freeze_left -= delta
+		return
+	_elapsed += delta
 
+	_rush_front_enemy(delta)
 	_run_combat(delta)
 	if _finished:
 		return
@@ -273,10 +332,15 @@ func _process(delta: float) -> void:
 
 	# 적 무리 앞줄을 뚫고 지나가지 않는다
 	if not _enemy_groups.is_empty():
-		var stop_z := _enemy_groups[0].position.z + _army_radius()
+		# 원거리 병종은 보스에게 붙지 않고 사거리 안쪽에서 멈춰 쏜다
+		var hold := 0.0
+		if _enemy_groups[0].is_boss:
+			var unit_range := float(_units[army.unit_type]["range"]) * army.range_mult
+			if unit_range > 0.0:
+				hold = unit_range * float(_tuning["boss"]["ranged_hold_ratio"])
+		var stop_z := _enemy_groups[0].position.z + _army_radius() + hold
 		_army_position.z = maxf(_army_position.z, stop_z)
 
-	_update_width_ratio(delta)
 	# 병력이 늘어 무리가 넓어지면 이동 범위가 줄어든다
 	var limit := _lateral_limit()
 	_target_x = clampf(_target_x, -limit, limit)
@@ -284,12 +348,36 @@ func _process(delta: float) -> void:
 	_army_view.position = _army_position
 	_hero_view.follow(_army_position, _army_radius())
 	_update_skill_view()
+	# 달리는 동안 발밑에 먼지를 뿌린다. 붙어 싸우는 동안에는 끈다
+	var extent := _display_extent()
+	_fx.set_dust(_display_center(), extent.x, extent.y, not (_combat != null and _combat.in_contact))
 	_road_view.follow(_army_position.z)
+	_field_view.follow(_army_position.z)
 	_update_camera()
 	_check_gates()
 	_update_hud()
 	if not _finished and _section <= _section_count and -_army_position.z >= _section * _section_length:
 		_enter_next_section()
+
+
+## 규칙 3: 아군이 일정 거리 안에 오면 맨 앞 적 무리가 달려온다. 닿으면 그 자리에서 싸운다. 보스는 달려오지 않는다.
+func _rush_front_enemy(delta: float) -> void:
+	if _enemy_groups.is_empty():
+		return
+	var group := _enemy_groups[0]
+	if group.is_boss:
+		return
+	var gap := _gap_to_front_enemy()
+	var contact := float(_tuning["combat"]["contact_distance"])
+	var rushing := gap <= float(_tuning["enemy_rush"]["trigger_distance"]) and gap > contact
+	group.set_running(rushing)
+	# 달려들기 시작하는 순간 한 번 함성을 낸다
+	if rushing and not group.has_meta("rush_shouted"):
+		group.set_meta("rush_shouted", true)
+		Sound.play("enemy_rush")
+	if rushing:
+		# 접촉 거리보다 더 파고들지는 않는다
+		group.position.z += minf(float(_tuning["enemy_rush"]["speed"]) * delta, gap - contact)
 
 
 ## 정해진 간격마다 가장 가까운 적 무리와의 교전을 계산한다.
@@ -300,6 +388,9 @@ func _run_combat(delta: float) -> void:
 		var group := _enemy_groups[0]
 		# 좁은 다리 구간의 무리와는 근접 동시 교전 수가 줄어든다
 		var limit_key := "melee_engage_limit_bridge" if group.section == _bridge_section else "melee_engage_limit"
+		# 보스는 몸집이 커서 더 많은 병사가 둘러싸고 싸운다
+		if group.is_boss:
+			limit_key = "melee_engage_limit_boss"
 		_combat = Combat.new(army, group.pools, _units, _tuning, int(_tuning[limit_key]), _strategy)
 		_tick_accum = 0.0
 
@@ -310,7 +401,12 @@ func _run_combat(delta: float) -> void:
 	_tick_accum += delta
 	while _tick_accum >= _tick_interval:
 		_tick_accum -= _tick_interval
+		var enemies_before := _combat.enemy_count()
+		var allies_before := army.count
 		var events := _combat.tick(_tick_interval, _gap_to_front_enemy())
+		if army.count < allies_before:
+			Sound.play("ally_die")
+		_register_kills(enemies_before - _combat.enemy_count())
 		_damage_accum += float(events["damage_dealt"])
 		if events["contact_started"]:
 			print("접촉: 아군 ", army.count, " / 적 ", _combat.enemy_count())
@@ -321,6 +417,8 @@ func _run_combat(delta: float) -> void:
 			_show_strategy_trigger("vanguard", enemy_anchor - Vector2(0.0, float(_visual["hud"]["delta_font_size"])))
 		if events["ally_fired"] or events["enemy_fired"]:
 			_sfx.play("arrow")
+			# 화살이 날아가 닿을 무렵 맞는 소리를 낸다
+			get_tree().create_timer(float(_tuning["arrow_view"]["flight_time"])).timeout.connect(_sfx.play.bind("arrow_hit"))
 		# 불화살: 궁병이 아닌데 쏘았다면 일제 사격이다
 		if events["ally_fired"] and float(_units[army.unit_type]["range"]) <= 0.0:
 			_show_strategy_trigger("fire_arrows", _count_anchor())
@@ -346,7 +444,50 @@ func _on_enemy_group_defeated() -> void:
 	if group.is_boss:
 		_boss_view.hide_warning()
 		_on_clear()
-	group.queue_free()
+		group.queue_free()
+		return
+	_play_wipe(group)
+	# 날아가는 병사가 끝까지 보이도록 조금 뒤에 지운다
+	get_tree().create_timer(float(_visual["soldier"]["death_fly"]["time"])).timeout.connect(group.queue_free)
+
+
+## 적 병사를 잡은 순간: 격파 수를 올리고, 처치음을 내고, 맞은 무리를 번쩍인다. 보스는 세지 않는다.
+func _register_kills(killed: int) -> void:
+	if killed <= 0 or _enemy_groups.is_empty() or _enemy_groups[0].is_boss:
+		return
+	_kills += killed
+	_hud.set_kills(_kills)
+	# 짧은 간격으로 이어 잡으면 처치음의 음이 한 단계씩 올라간다
+	if _elapsed - _last_kill_time <= float(_kill_fx["combo_window"]):
+		_combo = mini(_combo + 1, int(_kill_fx["combo_pitch_steps_max"]))
+	else:
+		_combo = 0
+	_last_kill_time = _elapsed
+	_sfx.play("kill", 1.0 + _combo * float(_kill_fx["combo_pitch_step"]))
+	_enemy_groups[0].flash(float(_kill_fx["flash"]), float(_kill_fx["flash_time"]))
+
+
+## 적 무리 전멸 순간: 잠깐 멈추고, 세게 흔들고, 소리와 글자로 알린다.
+func _play_wipe(group: EnemyGroup) -> void:
+	_freeze_left = float(_kill_fx["wipe_freeze"])
+	_shake_time = float(_kill_fx["wipe_shake_time"])
+	_shake_mult = float(_kill_fx["wipe_shake_mult"])
+	_sfx.play("wipe")
+	_fx.burst("wipe", group.global_position + Vector3.UP, Color(0, 0, 0, 0), 1.5)
+	# 게이트를 읽어야 하는 거리에서는 글자를 띄우지 않는다
+	if not _is_gate_within(float(_visual["gate"]["preview_distance"])):
+		_hud.show_delta(_kill_fx["wipe_text"], _damage_anchor(group.global_position), Color.html(_kill_fx["wipe_color"]))
+
+
+## 아직 지나지 않은 게이트가 앞쪽 distance 안에 있는가
+func _is_gate_within(distance: float) -> bool:
+	for pair in _gate_pairs:
+		if pair.passed:
+			continue
+		var ahead := _army_position.z - pair.position.z
+		if ahead > 0.0 and ahead <= distance:
+			return true
+	return false
 
 
 ## 장수 기술. 전방 적 무리까지의 거리를 넘겨 공격 기술의 발동 여부를 정한다.
@@ -358,7 +499,9 @@ func _run_hero_skill(delta: float) -> void:
 	if not events["activated"]:
 		return
 	if float(events["strike_damage"]) > 0.0 and _combat != null:
+		var enemies_before := _combat.enemy_count()
 		var dealt := _combat.deal_direct_damage(float(events["strike_damage"]))
+		_register_kills(enemies_before - _combat.enemy_count())
 		_shake_time = float(_tuning["screen_shake_duration"])
 		var group := _enemy_groups[0]
 		_skill_view.show_strike(_army_position - Vector3(0.0, 0.0, _army_radius()), group.global_position)
@@ -366,6 +509,7 @@ func _run_hero_skill(delta: float) -> void:
 	if _hero.skill_type() == "focus":
 		_skill_view.show_pulse(_display_center())
 	_hud.show_delta("%s 기술" % _hero.name, _count_anchor(), Color.html(_tuning["colors"]["hero_skill"]))
+	Sound.play("skill_" + GameState.hero_id)
 	print("%s 기술 발동" % _hero.name)
 
 
@@ -373,22 +517,68 @@ func _run_hero_skill(delta: float) -> void:
 func _run_boss_pattern(delta: float) -> void:
 	if _enemy_groups.is_empty() or not _enemy_groups[0].is_boss or _section <= _section_count:
 		return
-	if _gap_to_front_enemy() > float(_tuning["boss"]["activate_distance"]):
+	var gap := _gap_to_front_enemy()
+	if gap > float(_tuning["boss"]["activate_distance"]):
 		return
+	var boss: Dictionary = _tuning["boss"]
+	var view: Dictionary = _visual["boss_view"]
+	var pool: Army = _boss_group.pools[0]
 	# 판정은 화면에 보이는 무리의 좌우 끝으로 한다. 붉은 면에 걸쳐 보이면 맞는다
 	var half_width := _display_extent().x
 	var before := army.count
-	var in_contact := _combat != null and _combat.in_contact
-	var events := _boss_pattern.tick(delta, army, _army_position.x - half_width, _army_position.x + half_width, in_contact, _rng)
+	var in_range := gap <= float(boss["normal_range"])
+	var events := _boss_pattern.tick(delta, army, _army_position.x - half_width, _army_position.x + half_width, in_range, pool.total_health / pool.unit_health, _rng)
+
+	if events["enraged"]:
+		_hud.show_banner(view["enrage_text"])
+		_boss_group.set_color(Color.html(view["enrage_color"]))
+		Sound.set_music_pitch(float(view["enrage_music_pitch"]))
+		Sound.play("boss_enrage")
+		_shake_time = float(_kill_fx["wipe_shake_time"])
+		_shake_mult = float(_kill_fx["wipe_shake_mult"])
 	if int(events["warn_started"]) >= 0:
+		# 예고: 붉은 면이 깔리고 보스가 힘을 모은다
 		_boss_view.show_warning(int(events["warn_started"]))
+		_boss_group.pulse(float(view["cast_pulse"]), float(view["cast_pulse_time"]))
+		Sound.play("boss_warn")
 	if int(events["attacked"]) >= 0:
-		_boss_view.flash_attack(int(events["attacked"]))
-		_shake_time = float(_tuning["screen_shake_duration"])
-		_sfx.play("hit")
-	if events["hit"]:
-		_hud.show_delta("%+d" % (army.count - before), _count_anchor(), Color.html(_tuning["colors"]["enemy"]))
-		print("보스 공격 적중: ", before, " → ", army.count)
+		# 구역 공격이 떨어지는 순간: 번개 기둥, 조각, 큰 흔들림, 짧은 멈춤
+		var zone := int(events["attacked"])
+		_boss_view.flash_attack(zone)
+		_boss_view.strike_zone(zone)
+		var zone_range := BossPattern.zone_range(zone, _boss_road_width, int(boss["zones"]))
+		var zone_center := Vector3((zone_range.x + zone_range.y) / 2.0, 0.5, _army_position.z)
+		_fx.burst("boss_zone", zone_center, Color(0, 0, 0, 0), (zone_range.y - zone_range.x) / 2.0, _display_extent().y)
+		_shake_time = float(_kill_fx["wipe_shake_time"])
+		_shake_mult = float(_kill_fx["wipe_shake_mult"])
+		_freeze_left = float(_kill_fx["wipe_freeze"])
+		Sound.play("boss_lightning")
+		if events["hit"]:
+			_hud.show_delta("%+d" % (army.count - before), _count_anchor(), Color.html(_tuning["colors"]["enemy"]))
+			print("보스 공격 적중: ", before, " → ", army.count)
+		else:
+			_hud.show_delta(view["dodge_text"], _count_anchor(), Color.html(view["dodge_color"]))
+			Sound.play("boss_dodge")
+	# 떨어질 자리 표시는 무리가 있는 깊이를 따라간다(판정은 좌우 위치만 본다)
+	var center_z := _display_center().z
+	for marker in _boss_targets:
+		marker.global_position.z = center_z
+	if events["normal_fired"]:
+		# 일반 공격: 지금 아군이 있는 자리를 겨냥해 불덩이를 던지고, 떨어질 자리를 바닥에 예고한다
+		var from := _boss_group.global_position + Vector3.UP * _boss_height * float(view["orb_from_height"])
+		var marker := _boss_view.show_target(Vector3(float(events["normal_target"]), 0.0, center_z), float(boss["normal_radius"]), float(boss["normal_flight"]))
+		_boss_targets.append(marker)
+		_boss_view.fire_orb(from, marker, float(boss["normal_flight"]))
+		Sound.play("boss_fireball")
+	for landing: Dictionary in events["normal_landed"]:
+		if not _boss_targets.is_empty():
+			(_boss_targets.pop_front() as Node3D).queue_free()
+		_fx.burst("boss_hit", Vector3(float(landing["x"]), 1.0, center_z), Color(0, 0, 0, 0), float(boss["normal_radius"]))
+		Sound.play("boss_fireball_hit")
+		if int(landing["lost"]) > 0:
+			Sound.play("ally_die")
+			_shake_time = float(_tuning["screen_shake_duration"])
+			_hud.show_delta("-%d" % int(landing["lost"]), _count_anchor(), Color.html(_tuning["colors"]["enemy"]))
 	if not army.is_alive():
 		_on_defeat()
 
@@ -410,6 +600,7 @@ func _open_strategy_choice() -> void:
 
 func _on_strategy_chosen(id: String, offer: Array[String]) -> void:
 	var before := army.count
+	Sound.play("strategy_pick")
 	var new_family := _strategy.add(id, army)
 	var not_chosen := PackedStringArray()
 	for other in offer:
@@ -427,17 +618,24 @@ func _on_strategy_chosen(id: String, offer: Array[String]) -> void:
 
 	# 다 골랐으면 출발한다
 	_choosing = false
+	Sound.play("start_horn")
 	_hud.set_overlay_hidden(false)
 	# 게이트 글자는 다음 프레임에 거리 규칙으로 다시 켜진다
 	_hero_view.set_flag_text_visible(true)
 	if new_family != "":
 		_hud.show_delta("%s 계열 효과" % _strategy.family_name(new_family), _count_anchor(), _strategy.family_color(new_family))
+	if not GameState.seen_drag_hint:
+		_hud.show_drag_hint()
 	_start_section()
 
 
 ## 구간 끝에 닿으면 멈추지 않고 다음 구간으로 넘어간다. 마지막 구간 뒤에는 보스전이 이어진다.
 func _enter_next_section() -> void:
 	_section += 1
+	if _in_boss_section():
+		Sound.play_music("boss", Sound.music_volume())
+		# 보스 구간에서는 죽은 아군 병사도 튕겨 날아간다
+		_army_view.set_death_fly(_visual["soldier"]["death_fly"])
 	_start_section()
 
 
@@ -482,6 +680,7 @@ func _check_gates() -> void:
 			var color := Color.html(_gates[spec["type"]]["color"]).lightened(float(_tuning["delta_popup"]["lighten"]))
 			_hud.show_delta(result["popup"], _count_anchor(), color)
 			pair.play_pass(_army_position.x)
+			_fx.burst("gate", _display_center() + Vector3.UP, color, _display_extent().x)
 			print("게이트 %s: %s" % [_gates[spec["type"]]["name"], str(result["popup"]).replace("\n", " ")])
 			if not army.is_alive():
 				_on_defeat()
@@ -550,6 +749,7 @@ func _finish(cleared: bool) -> void:
 		"section_text": _reached_text(cleared),
 		"strategy_items": _strategy_items(),
 		"bonus_gold": _bonus_gold,
+		"kills": _kills,
 	})
 
 
@@ -602,7 +802,9 @@ func _show_arrows(events: Dictionary) -> void:
 ## 아군 앞줄(계산 위치)의 접촉선에 충돌 번쩍임을 띄운다.
 func _spawn_clash() -> void:
 	var front := Vector3(_army_position.x, 0.0, _army_position.z - _army_radius())
-	_clash_view.spawn(front, _display_extent().x * float(_visual["clash"]["width_ratio"]))
+	var half_width := _display_extent().x * float(_visual["clash"]["width_ratio"])
+	_clash_view.spawn(front, half_width)
+	_fx.burst("spark", front + Vector3.UP * float(_visual["clash"]["height_max"]), Color(0, 0, 0, 0), half_width)
 
 
 ## 모은 피해를 표시 배율을 곱해 앞 적 무리 위에 하나로 띄운다.
@@ -669,19 +871,15 @@ func _display_extent() -> Vector2:
 	return ArmyView.display_extent(army.count, _visual, _display_limit, _road_width, _width_ratio)
 
 
-## 보스 구간에서는 대형 최대 폭을 정해진 시간에 걸쳐 좁힌다(명세 4장 보스 장각).
-func _update_width_ratio(delta: float) -> void:
-	var normal := float(_tuning["formation_max_width_ratio"])
-	var boss := float(_tuning["boss_formation_max_width_ratio"])
-	var target := boss if _section > _section_count else normal
-	var speed := absf(normal - boss) / float(_tuning["boss_formation_shrink_time"])
-	_width_ratio = move_toward(_width_ratio, target, speed * delta)
-	_army_view.set_max_width_ratio(_width_ratio)
-
-
-## 좌우 이동 범위: 도로 반폭 − 무리 표시 반폭. 무리가 길 밖으로 나가지 않게 하되 최소값은 보장한다
+## 좌우 이동 범위: 도로 반폭 − 무리 표시 반폭. 무리가 길 밖으로 나가지 않게 하되 최소값은 보장한다.
+## 보스 구간은 광장이라 그 폭으로 계산한다.
 func _lateral_limit() -> float:
-	return maxf(_road_width / 2.0 - _display_extent().x, _lateral_limit_min)
+	var width := _boss_road_width if _in_boss_section() else _road_width
+	return maxf(width / 2.0 - _display_extent().x, _lateral_limit_min)
+
+
+func _in_boss_section() -> bool:
+	return _section > _section_count
 
 
 ## 아군 표시 대형의 중심. 앞줄을 계산 위치에 맞추느라 계산 중심보다 조금 뒤에 있다.
@@ -690,7 +888,8 @@ func _display_center() -> Vector3:
 
 
 func _update_camera() -> void:
-	# 좌우는 따라가지 않고 전진 방향만 따라가 도로가 화면 중앙에 머물게 한다.
+	# 평소에는 좌우를 따라가지 않고 전진 방향만 따라가 도로가 화면 중앙에 머물게 한다.
+	# 보스 구간은 광장이 넓어서 조금 물러나고 아군의 좌우 이동을 일부 따라간다.
 	# 아군 무리가 화면 높이의 정해진 위치(아래에서 3분의 1 근처)에 오도록 내려다보는 각을 더한다
 	var data: Dictionary = _visual["camera"]
 	var pitch := deg_to_rad(float(data["pitch_deg"]))
@@ -698,19 +897,27 @@ func _update_camera() -> void:
 	var half_vfov := atan(tan(deg_to_rad(_camera.fov) / 2.0) * view_size.y / view_size.x)
 	var depression := pitch + atan((float(data["army_screen_y"]) - 0.5) * 2.0 * tan(half_vfov))
 	var target_distance := float(data["distance_base"]) + float(data["distance_per_radius"]) * _display_extent().y
+	var target_x := 0.0
+	if _in_boss_section():
+		target_distance *= float(data["boss_distance_mult"])
+		target_x = _army_position.x * float(data["boss_follow_x"])
 	if _camera_distance < 0.0:
 		_camera_distance = target_distance
 	else:
 		var weight := 1.0 - exp(-float(data["follow_rate"]) * get_process_delta_time())
 		_camera_distance = lerpf(_camera_distance, target_distance, weight)
-	var anchor := Vector3(0.0, 0.0, _display_center().z)
+		_camera_x = lerpf(_camera_x, target_x, weight)
+	var anchor := Vector3(_camera_x, 0.0, _display_center().z)
 	_camera.position = anchor + Vector3(0.0, sin(depression), cos(depression)) * _camera_distance
 	_camera.rotation = Vector3(-pitch, 0.0, 0.0)
 	# 근접 접촉과 보스 공격 순간 짧게 흔든다
 	if _shake_time > 0.0:
 		_shake_time -= get_process_delta_time()
-		var strength := float(_tuning["screen_shake_strength"])
-		_camera.position += Vector3(_rng.randf_range(-strength, strength), _rng.randf_range(-strength, strength), 0.0)
+		var strength := float(_tuning["screen_shake_strength"]) * _shake_mult
+		# 흔들림은 표시일 뿐이라 판의 난수(_rng)를 쓰지 않는다. 흔드는 시간이 달라져도 게이트와 보스의 난수 순서가 같다
+		_camera.position += Vector3(randf_range(-strength, strength), randf_range(-strength, strength), 0.0)
+	else:
+		_shake_mult = 1.0
 
 
 func _update_hud() -> void:

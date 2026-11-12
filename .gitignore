@@ -8,3 +8,6 @@ Thumbs.db
 
 # 내보낸 빌드
 /build/
+
+# Claude 앱이 내려받은 파일을 두는 폴더(프로젝트 내용이 아님)
+/Claude outputs/

@@ -65,12 +65,18 @@ func tick(dt: float, gap: float) -> Dictionary:
 
 	if in_contact:
 		if events["contact_started"]:
+			# 접촉 순간의 한 방은 병력 전체가 아니라 맨 앞에서 싸우는 인원(교전 인원)만 준다
+			var front := mini(ally.count, _melee_limit + _strategy.melee_limit_bonus())
 			# 규칙 4: 접촉 순간 기병 돌격(선봉이면 배율 추가)
-			to_enemy += _charge_damage(ally) * _strategy.charge_mult()
-			# 선봉: 접촉 순간 병력 수에 비례한 추가 피해
-			to_enemy += ally.count * _strategy.contact_damage_per_soldier() * ally.attack_mult
+			to_enemy += _charge_damage(ally, front) * _strategy.charge_mult()
+			# 선봉: 접촉 순간 교전 인원에 비례한 추가 피해
+			to_enemy += front * _strategy.contact_damage_per_soldier() * ally.attack_mult
+			# 적의 돌격도 앞줄 병종부터 교전 인원까지만 센다
+			var slots := _melee_limit
 			for pool in enemies:
-				to_ally += _charge_damage(pool) * _matchup(pool.unit_type, ally.unit_type)
+				var charging := mini(pool.count, slots)
+				slots -= charging
+				to_ally += _charge_damage(pool, charging) * _matchup(pool.unit_type, ally.unit_type)
 		# 규칙 5: 근접 단계(횡진이면 교전 인원 추가)
 		var engaged := mini(ally.count, _melee_limit + _strategy.melee_limit_bonus())
 		to_enemy += engaged * _dps(ally) * dt
@@ -99,6 +105,8 @@ func tick(dt: float, gap: float) -> Dictionary:
 		var duration := _strategy.dot_duration()
 		_dots.append({"rate": ranged_to_enemy * dot_ratio / duration, "time": duration})
 
+	# 화살에 강한 상대(보스)는 원거리 피해를 일부만 받는다
+	ranged_to_enemy *= _ranged_taken_mult()
 	# 규칙 6: 아군 피해는 적 앞줄 병종부터 들어간다
 	_deal_to_enemies(to_enemy + ranged_to_enemy, true, chain)
 	_deal_to_enemies(_tick_dots(dt), false, chain)
@@ -202,8 +210,17 @@ func _enemy_ranged_damage(dt: float, gap: float) -> float:
 	return damage
 
 
-func _charge_damage(army: Army) -> float:
-	return army.count * float(_units[army.unit_type]["charge_damage"]) * army.attack_mult
+## 맨 앞에 살아 있는 적 병종이 원거리 피해를 받는 비율(units.json의 ranged_taken_mult, 없으면 1)
+func _ranged_taken_mult() -> float:
+	for pool in enemies:
+		if pool.is_alive():
+			return float(_units[pool.unit_type].get("ranged_taken_mult", 1.0))
+	return 1.0
+
+
+## 돌격하는 인원(soldiers)이 접촉 순간 주는 피해
+func _charge_damage(army: Army, soldiers: int) -> float:
+	return soldiers * float(_units[army.unit_type]["charge_damage"]) * army.attack_mult
 
 
 func _dps(army: Army) -> float:

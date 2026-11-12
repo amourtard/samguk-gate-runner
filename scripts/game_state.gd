@@ -12,6 +12,8 @@ var unlocked_stages := 1
 var gold := 0
 # 영구 강화 레벨. 시설 이름 → 레벨
 var upgrade_levels := {}
+# 첫 판의 조작 안내(좌우로 끌기)를 이미 봤는가
+var seen_drag_hint := false
 
 # 자동 생성한 스테이지. 순번 → 스테이지 데이터
 var _generated := {}
@@ -146,6 +148,7 @@ func save_game() -> void:
 		"unlocked_stages": unlocked_stages,
 		"gold": gold,
 		"upgrades": upgrade_levels,
+		"seen_drag_hint": seen_drag_hint,
 		"generated": generated,
 	}
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -171,6 +174,7 @@ func load_game() -> void:
 	unlocked_stages = maxi(int(data.get("unlocked_stages", 1)), 1)
 	stage_index = clampi(int(data.get("stage_index", 0)), 0, unlocked_stages - 1)
 	gold = maxi(int(data.get("gold", 0)), 0)
+	seen_drag_hint = bool(data.get("seen_drag_hint", false))
 	upgrade_levels = {}
 	var upgrades: Dictionary = DataDb.table("upgrades")["list"]
 	var saved_levels: Variant = data.get("upgrades", {})
@@ -192,5 +196,6 @@ func reset_game() -> void:
 	unlocked_stages = 1
 	gold = 0
 	upgrade_levels = {}
+	seen_drag_hint = false
 	_generated = {}
 	save_game()

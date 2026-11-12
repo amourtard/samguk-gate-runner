@@ -44,6 +44,13 @@ var _overlay_hidden := false
 var _banner: PanelContainer
 var _banner_label: Label
 var _banner_tween: Tween
+# 이번 판 누적 격파 수. 상단 띠 아래 오른쪽에 둔다
+var _kill_label: Label
+var _kill_tween: Tween
+var _kill_fx: Dictionary
+# 첫 판의 조작 안내
+var _drag_hint: Label
+var _drag_hint_data: Dictionary
 
 
 func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary, hero_name: String) -> void:
@@ -73,6 +80,9 @@ func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary
 	_boss_data = visual["boss_view"]
 	_build_boss_name(_boss_data)
 	_build_banner(visual["banner"])
+	_kill_fx = visual["kill_fx"]
+	_drag_hint_data = visual["drag_hint"]
+	_build_kill_label()
 
 	_army.changed.connect(_on_army_changed)
 	_on_army_changed()
@@ -134,6 +144,17 @@ func set_next_enemy(pools: Array[Army]) -> void:
 	_strip_title.text = "다음 적"
 	if pools.size() == 1 and _units[pools[0].unit_type].get("show_health", false):
 		_strip_title.text = _units[pools[0].unit_type]["name"]
+		var face := UiText.texture(str(_boss_data["portrait"]))
+		if face != null:
+			var picture := TextureRect.new()
+			picture.texture = face
+			picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			var face_size := float(_boss_data["portrait_size"])
+			picture.custom_minimum_size = Vector2(face_size, face_size)
+			picture.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_strip.add_child(picture)
 		_strip.add_child(_boss_health_bar(pools[0]))
 		return
 
@@ -238,9 +259,68 @@ func set_overlay_hidden(hidden: bool) -> void:
 	_top.visible = not hidden
 	_count_box.visible = not hidden
 	_popup_root.visible = not hidden
+	if _drag_hint != null:
+		_drag_hint.visible = not hidden
 	if hidden:
 		_boss_name.visible = false
 		_banner.visible = false
+
+
+## 첫 판에만 띄우는 조작 안내. 좌우로 흔들리며 끌어서 움직인다는 것을 알린다.
+func show_drag_hint() -> void:
+	if _drag_hint != null:
+		return
+	var data := _drag_hint_data
+	_drag_hint = Label.new()
+	_drag_hint.text = data["text"]
+	_drag_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_drag_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_drag_hint.add_theme_font_size_override("font_size", int(data["font_size"]))
+	_drag_hint.add_theme_constant_override("outline_size", int(data["outline"]))
+	_drag_hint.add_theme_color_override("font_outline_color", Color.BLACK)
+	add_child(_drag_hint)
+	var view_size := get_viewport().get_visible_rect().size
+	_drag_hint.size = Vector2(view_size.x, 0.0)
+	_drag_hint.position = Vector2(0.0, view_size.y * float(data["y"]))
+	var sway := float(data["sway"])
+	var tween := _drag_hint.create_tween().set_loops()
+	tween.tween_property(_drag_hint, "position:x", -sway, float(data["sway_time"])).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(_drag_hint, "position:x", sway, float(data["sway_time"]) * 2.0).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(_drag_hint, "position:x", 0.0, float(data["sway_time"])).set_trans(Tween.TRANS_SINE)
+
+
+func hide_drag_hint() -> void:
+	if _drag_hint == null:
+		return
+	_drag_hint.queue_free()
+	_drag_hint = null
+
+
+## 누적 격파 수를 갱신하고 숫자를 순간 키웠다 되돌린다.
+func set_kills(count: int) -> void:
+	_kill_label.text = "격파 %d" % count
+	_kill_label.visible = count > 0
+	_kill_label.reset_size()
+	# 오른쪽 끝을 기준으로 붙이고 그 자리에서 커졌다 돌아온다
+	_kill_label.position.x = _top.size.x - float(_hud["kill_right"]) - _kill_label.size.x
+	_kill_label.pivot_offset = Vector2(_kill_label.size.x, _kill_label.size.y / 2.0)
+	if _kill_tween != null:
+		_kill_tween.kill()
+	_kill_label.scale = Vector2.ONE * float(_kill_fx["count_pop_scale"])
+	_kill_tween = _kill_label.create_tween()
+	_kill_tween.tween_property(_kill_label, "scale", Vector2.ONE, float(_kill_fx["count_pop_time"]))
+
+
+func _build_kill_label() -> void:
+	_kill_label = Label.new()
+	_kill_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_kill_label.add_theme_font_size_override("font_size", int(_hud["kill_font_size"]))
+	_kill_label.add_theme_constant_override("outline_size", int(_hud["kill_outline"]))
+	_kill_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_kill_label.add_theme_color_override("font_color", Color.html(_hud["kill_color"]))
+	_kill_label.position.y = float(_hud["kill_top"])
+	_kill_label.visible = false
+	_top.add_child(_kill_label)
 
 
 ## 화면 위쪽 안내 띠(지형 이름 등)를 잠깐 보여주고 사라지게 한다.

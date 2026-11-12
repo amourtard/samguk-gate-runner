@@ -4,12 +4,13 @@
 	"section_length": 150,
 	"combat_advance_ratio": 0.2,
 	"gate_slowdown": {
-		"enabled": true,
+		"enabled": false,
 		"distance": 12,
 		"speed_ratio": 0.5
 	},
 	"melee_engage_limit": 20,
 	"melee_engage_limit_bridge": 8,
+	"melee_engage_limit_boss": 40,
 	"ranged_fire_limit": 40,
 	"combat": {
 		"tick": 0.1,
@@ -19,8 +20,12 @@
 	},
 	"soldier_display_limit": 200,
 	"formation_max_width_ratio": 0.6,
-	"boss_formation_max_width_ratio": 0.4,
-	"boss_formation_shrink_time": 0.5,
+	"enemy_rush": {
+		"trigger_distance": 26,
+		"speed": 6
+	},
+	"boss_road_width": 16,
+	"boss_plaza_behind": 20,
 	"number_popup": {
 		"duration": 0.1,
 		"scale": 1.5
@@ -63,7 +68,40 @@
 	},
 	"sfx": {
 		"volume_db": -6,
-		"min_interval": { "gate": 0, "arrow": 0.25, "hit": 0.2 }
+		"music_volume_db": -13,
+		"menu_music_volume_db": -18,
+		"voices": 8,
+		"min_interval": { "gate": 0, "arrow": 0.25, "arrow_hit": 0.25, "hit": 0.2, "kill": 0.07, "wipe": 0, "button": 0.05,
+			"ally_die": 0.3,
+			"boss_fireball_hit": 0.1 },
+		"files": {
+			"gate": "gate.wav",
+			"arrow": "arrow.wav",
+			"arrow_hit": "arrow_hit.wav",
+			"hit": ["clash_1.wav", "clash_2.wav", "clash_3.wav"],
+			"kill": "kill.wav",
+			"wipe": "wipe.wav",
+			"button": "button.wav",
+			"gold": "gold.wav",
+			"upgrade": "upgrade.wav",
+			"victory": "victory.wav",
+			"defeat": "defeat.wav",
+			"skill_guan_yu": "skill_guan_yu.wav",
+			"skill_zhang_fei": "skill_zhang_fei.wav",
+			"skill_zhuge_liang": "skill_zhuge_liang.wav",
+			"boss_warn": "boss_warn.wav",
+			"boss_lightning": "boss_lightning.wav",
+			"boss_fireball": "boss_fireball.wav",
+			"boss_fireball_hit": "boss_fireball_hit.wav",
+			"boss_enrage": "boss_enrage.wav",
+			"boss_dodge": "boss_dodge.wav",
+			"enemy_rush": "enemy_rush.wav",
+			"start_horn": "start_horn.wav",
+			"strategy_pick": "strategy_pick.wav",
+			"ally_die": "ally_die.wav"
+		},
+		"music": { "run": "bgm_run.wav", "boss": "bgm_boss.wav",
+			"menu": "bgm_menu.wav" }
 	},
 	"gate_view": {
 		"height": 2.6,
@@ -83,7 +121,14 @@
 		"zones": 2,
 		"hit_edge_tolerance": 0,
 		"hit_loss_ratio": 0.25,
-		"contact_loss_per_second": 2,
+		"normal_interval": 1.5,
+		"normal_loss": 3,
+		"normal_flight": 1.0,
+		"normal_radius": 1.6,
+		"normal_range": 16,
+		"ranged_hold_ratio": 0.8,
+		"enrage_ratio": 0.5,
+		"enrage_interval_mult": 0.6,
 		"activate_distance": 40,
 		"warn_length": 40,
 		"warn_lift": 0.03,

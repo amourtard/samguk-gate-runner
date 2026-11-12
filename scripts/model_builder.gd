@@ -8,6 +8,47 @@ extends RefCounted
 
 const UNIT_SHADER := preload("res://assets/shaders/unit.gdshader")
 
+# 파일에서 읽은 메시. 경로 → Mesh
+static var _file_cache := {}
+
+
+## 이름으로 모델 메시를 얻는다. visual.json의 model_files에 파일이 있으면 그 파일(.glb)의 메시를,
+## 없거나 읽지 못하면 models의 부품 목록으로 만든 메시를 쓴다.
+static func model(model_name: String, visual: Dictionary) -> Mesh:
+	var files: Dictionary = visual.get("model_files", {})
+	if files.has(model_name):
+		var mesh := load_file_mesh(str(files[model_name]))
+		if mesh != null:
+			return mesh
+	return build(visual["models"][model_name])
+
+
+## .glb 파일 안의 첫 메시를 꺼낸다. 꼭짓점 색 규칙은 부품으로 만든 메시와 같다.
+static func load_file_mesh(path: String) -> Mesh:
+	if _file_cache.has(path):
+		return _file_cache[path]
+	if not ResourceLoader.exists(path):
+		push_warning("모델 파일을 읽지 못했습니다: " + path)
+		return null
+	var scene := load(path) as PackedScene
+	if scene == null:
+		return null
+	var root := scene.instantiate()
+	var mesh := _first_mesh(root)
+	root.free()
+	_file_cache[path] = mesh
+	return mesh
+
+
+static func _first_mesh(node: Node) -> Mesh:
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		return (node as MeshInstance3D).mesh
+	for child in node.get_children():
+		var found := _first_mesh(child)
+		if found != null:
+			return found
+	return null
+
 
 static func build(parts: Array) -> ArrayMesh:
 	var vertices := PackedVector3Array()

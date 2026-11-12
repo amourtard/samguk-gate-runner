@@ -51,6 +51,7 @@ func setup(result: Dictionary, stage_id: String, can_go_next: bool) -> void:
 	var units: Dictionary = DataDb.table("units")
 	var unit_type: String = result["unit_type"]
 	_add_row("남은 병력", [_icon(UNIT_ICON % unit_type, Color.html(units[unit_type]["hud_color"])), _label("%d명" % int(result["count"]))])
+	_add_row("격파", [_label("%d명" % int(result["kills"]))])
 	var items: Array = result["strategy_items"]
 	var strategy_parts: Array[Control] = []
 	if items.is_empty():
@@ -83,7 +84,13 @@ func setup(result: Dictionary, stage_id: String, can_go_next: bool) -> void:
 		Color.html(_ui["primary_text"] if not cleared else _ui["secondary_text"]))
 	_style_button(_heroes_button, Color.html(_ui["minor_button"]), Color.html(_ui["secondary_text"]))
 	_style_button(_upgrade_button, Color.html(_ui["minor_button"]), Color.html(_ui["win_color"]))
+	UiText.skin_button(_next_button, "primary")
+	UiText.skin_button(_retry_button, "secondary" if cleared else "primary")
+	UiText.skin_button(_heroes_button, "wood")
+	UiText.skin_button(_upgrade_button, "wood")
 	_next_button.visible = cleared and can_go_next
+	# 멈춘 판을 덮는 어두운 막 바로 위에 승리, 패배 배경 그림을 깐다
+	UiText.add_backdrop(self, "result_win" if cleared else "result_lose", 1)
 
 
 func _style_button(button: Button, back: Color, text: Color) -> void:

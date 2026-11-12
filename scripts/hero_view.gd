@@ -14,7 +14,9 @@ func setup(hero_id: String, unit_type: String, visual: Dictionary) -> void:
 	var material := ModelBuilder.make_material(color, float(visual["soldier"]["bob_height"]), float(visual["soldier"]["bob_speed"]))
 
 	var body := MeshInstance3D.new()
-	body.mesh = ModelBuilder.build(visual["models"][unit_type])
+	# 장수마다 따로 만든 모델이 있으면 그것을, 없으면 시작 병종 모델을 쓴다
+	var hero_model := "hero_" + hero_id
+	body.mesh = ModelBuilder.model(hero_model if (visual.get("model_files", {}) as Dictionary).has(hero_model) else unit_type, visual)
 	body.material_override = material
 	add_child(body)
 

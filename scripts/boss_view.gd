@@ -14,16 +14,23 @@ var _flash_color: Color
 var _flash_time: float
 var _warning_zone := -1
 var _warn_elapsed := 0.0
+var _view: Dictionary
+# 구역마다의 좌우 범위와 예고 면 길이. 번개 기둥을 세울 때 쓴다
+var _zone_ranges: Array[Vector2] = []
+var _length := 0.0
 
 
-func setup(tuning: Dictionary, visual: Dictionary) -> void:
+func setup(tuning: Dictionary, visual: Dictionary, warn_length := -1.0) -> void:
 	var data: Dictionary = tuning["boss"]
 	var view: Dictionary = visual["boss_view"]
-	var road_width := float(tuning["road"]["width"])
+	var road_width := float(tuning["boss_road_width"])
 	var zones := int(data["zones"])
-	var length := float(data["warn_length"])
+	# 예고 면 길이. 광장보다 길면 run이 광장 길이로 줄여서 넘긴다
+	var length := warn_length if warn_length > 0.0 else float(data["warn_length"])
 	var lift := float(data["warn_lift"])
 	_warn_time = float(data["warn_time"])
+	_view = view
+	_length = length
 	_warn_color = Color.html(data["warn_color"])
 	_alpha_start = float(view["warn_alpha_start"])
 	_alpha_end = float(data["warn_alpha"])
@@ -33,6 +40,7 @@ func setup(tuning: Dictionary, visual: Dictionary) -> void:
 	# 예고 면은 판정에 쓰는 구역 범위 그대로 그린다
 	for zone in zones:
 		var range_ := BossPattern.zone_range(zone, road_width, zones)
+		_zone_ranges.append(range_)
 		var plane := PlaneMesh.new()
 		plane.size = Vector2(range_.y - range_.x, length)
 		var material := StandardMaterial3D.new()
@@ -70,6 +78,89 @@ func flash_attack(zone: int) -> void:
 	tween.tween_callback(func() -> void:
 		if _warning_zone != zone:
 			mesh.visible = false)
+
+
+## 구역 공격이 떨어지는 순간 그 구역에 번개 기둥을 세웠다가 가늘어지며 사라지게 한다.
+func strike_zone(zone: int) -> void:
+	if zone < 0 or zone >= _zone_ranges.size():
+		return
+	var range_ := _zone_ranges[zone]
+	var height := float(_view["bolt_height"])
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color.html(_view["bolt_color"])
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.disable_fog = true
+	for i in int(_view["bolt_count"]):
+		var box := BoxMesh.new()
+		box.size = Vector3(float(_view["bolt_width"]), height, float(_view["bolt_width"]))
+		var bolt := MeshInstance3D.new()
+		bolt.mesh = box
+		bolt.material_override = material
+		bolt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		bolt.position = Vector3(randf_range(range_.x, range_.y), height / 2.0, randf_range(0.0, _length))
+		add_child(bolt)
+		var tween := bolt.create_tween()
+		tween.tween_property(bolt, "scale", Vector3(0.0, 1.0, 0.0), float(_view["bolt_time"]))
+		tween.tween_callback(bolt.queue_free)
+
+
+## 불덩이가 떨어질 자리를 바닥의 붉은 원으로 예고한다. 안쪽 원이 점점 커져 꽉 차면 떨어진다.
+## 반환한 노드를 불덩이의 목표로 쓰고, 떨어진 뒤 호출한 쪽이 지운다.
+func show_target(at: Vector3, radius: float, flight: float) -> Node3D:
+	var marker := Node3D.new()
+	marker.top_level = true
+	add_child(marker)
+	marker.global_position = at + Vector3.UP * float(_view["target_lift"])
+	var color := Color.html(_view["target_color"])
+	for inner in [false, true]:
+		var disc := CylinderMesh.new()
+		disc.top_radius = radius
+		disc.bottom_radius = radius
+		disc.height = 0.02
+		disc.radial_segments = 24
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.disable_fog = true
+		color.a = float(_view["target_alpha"]) * (1.0 if inner else 0.5)
+		material.albedo_color = color
+		var instance := MeshInstance3D.new()
+		instance.mesh = disc
+		instance.material_override = material
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		marker.add_child(instance)
+		if inner:
+			instance.position.y = 0.01
+			var start := float(_view["target_start_scale"])
+			instance.scale = Vector3(start, 1.0, start)
+			instance.create_tween().tween_property(instance, "scale", Vector3.ONE, flight)
+	return marker
+
+
+## 일반 공격: 보스에서 예고한 자리(target)로 불덩이를 포물선으로 날린다. from은 월드 좌표다.
+func fire_orb(from: Vector3, target: Node3D, flight: float) -> void:
+	var sphere := SphereMesh.new()
+	sphere.radius = float(_view["orb_radius"])
+	sphere.height = sphere.radius * 2.0
+	sphere.radial_segments = 8
+	sphere.rings = 4
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color.html(_view["orb_color"])
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.disable_fog = true
+	var orb := MeshInstance3D.new()
+	orb.mesh = sphere
+	orb.material_override = material
+	orb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	orb.top_level = true
+	add_child(orb)
+	orb.global_position = from
+	var arc := float(_view["orb_arc"])
+	var tween := orb.create_tween()
+	tween.tween_method(func(progress: float) -> void:
+		var to := target.global_position if is_instance_valid(target) else orb.global_position
+		orb.global_position = from.lerp(to, progress) + Vector3.UP * sin(progress * PI) * arc, 0.0, 1.0, flight)
+	tween.tween_callback(orb.queue_free)
 
 
 func hide_warning() -> void:

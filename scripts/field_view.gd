@@ -4,11 +4,47 @@ extends Node3D
 ## 소품은 판 시작부터 보스 너머까지 한 번에 MultiMesh로 뿌리고, 도로 안쪽에는 두지 않는다.
 
 
+var _model_files := {}
+# 먼 산과 하늘 그림 판. 카메라와 같은 거리를 두고 따라간다
+var _backdrop: MeshInstance3D
+var _backdrop_distance := 0.0
+
+
 ## clear_ranges: 소품을 두지 않을 전진 거리 범위 목록(Vector2(시작, 끝), 단위 m)
 func setup(environment: Environment, light: DirectionalLight3D, length: float, road_width: float, visual: Dictionary, clear_ranges: Array[Vector2] = []) -> void:
 	_setup_sky(environment, visual)
 	_setup_light(light, environment, visual)
+	_model_files = visual.get("model_files", {})
 	_scatter_props(length, road_width, visual["props"], clear_ranges)
+	_setup_backdrop(visual["sky"])
+
+
+## 아군이 나아간 만큼 먼 산 그림도 같이 옮긴다(늘 같은 거리에 보인다).
+func follow(z: float) -> void:
+	if _backdrop != null:
+		_backdrop.position.z = z - _backdrop_distance
+
+
+## 먼 산과 하늘 그림을 길 끝 너머에 세운다. 그림이 없으면 그라데이션 하늘만 보인다.
+func _setup_backdrop(sky_data: Dictionary) -> void:
+	var image := UiText.texture(str(sky_data.get("backdrop", "")))
+	if image == null:
+		return
+	var quad := QuadMesh.new()
+	var width := float(sky_data["backdrop_width"])
+	quad.size = Vector2(width, width * image.get_height() / image.get_width())
+	var material := StandardMaterial3D.new()
+	material.albedo_texture = image
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.disable_fog = true
+	material.disable_receive_shadows = true
+	quad.material = material
+	_backdrop = MeshInstance3D.new()
+	_backdrop.mesh = quad
+	_backdrop.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_backdrop_distance = float(sky_data["backdrop_distance"])
+	_backdrop.position = Vector3(0.0, quad.size.y / 2.0 + float(sky_data["backdrop_bottom"]), -_backdrop_distance)
+	add_child(_backdrop)
 
 
 func _setup_sky(environment: Environment, visual: Dictionary) -> void:
@@ -30,6 +66,13 @@ func _setup_sky(environment: Environment, visual: Dictionary) -> void:
 	environment.fog_depth_begin = float(sky_data["fog_begin"])
 	environment.fog_depth_end = float(sky_data["fog_end"])
 	environment.fog_sky_affect = 0.0
+
+	# 색을 조금 진하고 또렷하게 한다
+	if bool(sky_data.get("tonemap_filmic", false)):
+		environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.adjustment_enabled = true
+	environment.adjustment_saturation = float(sky_data.get("saturation", 1.0))
+	environment.adjustment_contrast = float(sky_data.get("contrast", 1.0))
 
 
 func _setup_light(light: DirectionalLight3D, environment: Environment, visual: Dictionary) -> void:
@@ -71,7 +114,12 @@ func _scatter_props(length: float, road_width: float, data: Dictionary, clear_ra
 				transforms.append(Transform3D(basis, Vector3(x, 0.0, z)))
 		var multimesh := MultiMesh.new()
 		multimesh.transform_format = MultiMesh.TRANSFORM_3D
-		multimesh.mesh = ModelBuilder.build(type_data["parts"])
+		# 소품 모델 파일이 있으면 그것을, 없으면 부품 목록으로 만든다
+		var file_mesh: Mesh = null
+		var files: Dictionary = _model_files
+		if files.has("prop_" + str(type_name)):
+			file_mesh = ModelBuilder.load_file_mesh(str(files["prop_" + str(type_name)]))
+		multimesh.mesh = file_mesh if file_mesh != null else ModelBuilder.build(type_data["parts"])
 		multimesh.instance_count = transforms.size()
 		for i in transforms.size():
 			multimesh.set_instance_transform(i, transforms[i])
