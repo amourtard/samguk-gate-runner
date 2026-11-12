@@ -423,13 +423,14 @@ func _run_combat(delta: float) -> void:
 			var enemy_anchor := _damage_anchor(_enemy_groups[0].global_position)
 			_show_strategy_trigger("fire_attack", enemy_anchor)
 			_show_strategy_trigger("vanguard", enemy_anchor - Vector2(0.0, float(_visual["hud"]["delta_font_size"])))
+			_show_strategy_trigger("chain", enemy_anchor - Vector2(0.0, float(_visual["hud"]["delta_font_size"]) * 2.0))
 		if events["ally_fired"] or events["enemy_fired"]:
 			_sfx.play("arrow")
 			# 화살이 날아가 닿을 무렵 맞는 소리를 낸다
 			get_tree().create_timer(float(_tuning["arrow_view"]["flight_time"])).timeout.connect(_sfx.play.bind("arrow_hit"))
 		# 불화살: 궁병이 아닌데 쏘았다면 일제 사격이다
 		if events["ally_fired"] and float(_units[army.unit_type]["range"]) <= 0.0:
-			_show_strategy_trigger("fire_arrows", _count_anchor())
+			_show_strategy_trigger("fire_arrows", _popup_anchor())
 		_show_arrows(events)
 		if _combat.in_contact:
 			_sfx.play("hit")
@@ -527,7 +528,7 @@ func _run_hero_skill(delta: float) -> void:
 		_show_strike_numbers(dealt, group)
 	if _hero.skill_type() == "focus":
 		_skill_view.show_pulse(_display_center())
-	_hud.show_delta("%s 기술" % _hero.name, _count_anchor(), Color.html(_tuning["colors"]["hero_skill"]))
+	_hud.show_delta("%s 기술" % _hero.name, _popup_anchor(), Color.html(_tuning["colors"]["hero_skill"]))
 	Sound.play("skill_" + GameState.hero_id)
 	print("%s 기술 발동" % _hero.name)
 
@@ -576,10 +577,10 @@ func _run_boss_pattern(delta: float) -> void:
 		_boss_stats["zones"] = int(_boss_stats.get("zones", 0)) + 1
 		if events["hit"]:
 			_boss_stats["zone_hits"] = int(_boss_stats.get("zone_hits", 0)) + 1
-			_hud.show_delta("%+d" % (army.count - before), _count_anchor(), Color.html(_tuning["colors"]["enemy"]))
+			_hud.show_delta("%+d" % (army.count - before), _popup_anchor(), Color.html(_tuning["colors"]["enemy"]))
 			print("보스 공격 적중: ", before, " → ", army.count)
 		else:
-			_hud.show_delta(view["dodge_text"], _count_anchor(), Color.html(view["dodge_color"]))
+			_hud.show_delta(view["dodge_text"], _popup_anchor(), Color.html(view["dodge_color"]))
 			Sound.play("boss_dodge")
 	# 떨어질 자리 표시는 무리가 있는 깊이를 따라간다(판정은 좌우 위치만 본다)
 	var center_z := _display_center().z
@@ -602,7 +603,7 @@ func _run_boss_pattern(delta: float) -> void:
 			_boss_stats["fireball_hits"] = int(_boss_stats.get("fireball_hits", 0)) + 1
 			Sound.play("ally_die")
 			_shake_time = float(_tuning["screen_shake_duration"])
-			_hud.show_delta("-%d" % int(landing["lost"]), _count_anchor(), Color.html(_tuning["colors"]["enemy"]))
+			_hud.show_delta("-%d" % int(landing["lost"]), _popup_anchor(), Color.html(_tuning["colors"]["enemy"]))
 	if not army.is_alive():
 		_on_defeat()
 
@@ -655,7 +656,7 @@ func _on_strategy_chosen(id: String, offer: Array[String]) -> void:
 	# 게이트 글자는 다음 프레임에 거리 규칙으로 다시 켜진다
 	_hero_view.set_flag_text_visible(true)
 	if new_family != "":
-		_hud.show_delta("%s 계열 효과" % _strategy.family_name(new_family), _count_anchor(), _strategy.family_color(new_family))
+		_hud.show_delta("%s 계열 효과" % _strategy.family_name(new_family), _popup_anchor(), _strategy.family_color(new_family))
 	if not GameState.seen_drag_hint:
 		_hud.show_drag_hint()
 	_start_section()
@@ -679,7 +680,7 @@ func _start_section() -> void:
 	var add := _strategy.section_start_add()
 	if add > 0:
 		army.set_count(army.count + add)
-		_hud.show_delta("의병\n%+d" % add, _count_anchor(), _strategy_color("volunteers"))
+		_hud.show_delta("의병\n%+d" % add, _popup_anchor(), _strategy_color("volunteers"))
 	_update_hud()
 
 
@@ -713,7 +714,7 @@ func _check_gates() -> void:
 			_bonus_gold += int(result["gold"])
 			_sfx.play("gate")
 			var color := Color.html(_gates[spec["type"]]["color"]).lightened(float(_tuning["delta_popup"]["lighten"]))
-			_hud.show_delta(result["popup"], _count_anchor(), color)
+			_hud.show_delta(result["popup"], _popup_anchor(), color)
 			pair.play_pass(_army_position.x)
 			_fx.burst("gate", _display_center() + Vector3.UP, color, _display_extent().x)
 			print("게이트 %s: %s" % [_gates[spec["type"]]["name"], str(result["popup"]).replace("\n", " ")])
@@ -1026,6 +1027,11 @@ func _owned_text() -> String:
 	for id in _strategy.owned:
 		names.append(_strategy.display_name(id))
 	return ", ".join(names) if not names.is_empty() else "없음"
+
+
+## 무리 위에 띄우는 글자(손실, 회피, 책략)의 자리. 병력 숫자와 겹치지 않게 그보다 위에 둔다
+func _popup_anchor() -> Vector2:
+	return _count_anchor() - Vector2(0.0, float(_visual["hud"]["popup_raise"]))
 
 
 ## 무리 머리 위의 화면 좌표. 표시 대형 중심 위, 병사 키보다 조금 높은 곳이다

@@ -5,7 +5,7 @@
 		"gates": [15, 75, 100],
 		"enemies": [45, 125]
 	},
-	"enemy_group_weights": [0.05, 0.08, 0.13, 0.18, 0.24, 0.32],
+	"enemy_group_weights": [0.08, 0.11, 0.14, 0.18, 0.22, 0.27],
 	"boss": {
 		"unit": "boss",
 		"distance_after_last_section": 30

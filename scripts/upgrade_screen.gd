@@ -88,7 +88,8 @@ func _make_card(id: String, entry: Dictionary) -> PanelContainer:
 	style.set_border_width_all(int(_ui["card_border_width"]))
 	style.set_corner_radius_all(int(_ui["corner"]))
 	style.set_content_margin_all(float(_ui["card_padding"]))
-	panel.add_theme_stylebox_override("panel", style)
+	var skinned := UiText.panel_box("wood", float(_ui["card_padding"]))
+	panel.add_theme_stylebox_override("panel", skinned if skinned != null else style)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 16)

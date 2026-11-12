@@ -81,7 +81,9 @@
 			"name": "연환",
 			"family": "fire",
 			"damage_taken_bonus": 0.25,
-			"desc": "지속 피해 중인 적이 받는 피해 +{damage_taken_bonus_pct}%"
+			"burn_health_ratio": 0.08,
+			"burn_duration": 4,
+			"desc": "교전 시작 시 적에게 {burn_duration}초간 불을 붙인다\n불붙은 적이 받는 피해 +{damage_taken_bonus_pct}%"
 		}
 	}
 }

@@ -14,6 +14,7 @@ var _normal_interval: float
 var _normal_loss: int
 var _normal_flight: float
 var _normal_radius: float
+var _normal_core: float
 var _enrage_ratio: float
 var _enrage_interval_mult: float
 # 체력이 일정 비율 아래로 내려가면 분노해 구역 공격 간격이 짧아진다
@@ -37,6 +38,7 @@ func _init(tuning: Dictionary) -> void:
 	_normal_loss = int(data["normal_loss"])
 	_normal_flight = float(data["normal_flight"])
 	_normal_radius = float(data["normal_radius"])
+	_normal_core = float(data["normal_core"])
 	_enrage_ratio = float(data["enrage_ratio"])
 	_enrage_interval_mult = float(data["enrage_interval_mult"])
 	# 보스전은 광장에서 하므로 구역은 광장 폭을 나눈 것이다
@@ -65,7 +67,7 @@ func tick(dt: float, army: Army, ally_left: float, ally_right: float, in_range: 
 			# 공격 순간 아군 무리가 그 구역에 걸쳐 있으면 병력의 일정 비율을 잃는다
 			events["attacked"] = warning_zone
 			if overlaps_zone(ally_left, ally_right, warning_zone, _road_width, _zones, _hit_edge_tolerance):
-				army.lose_soldiers(roundi(army.count * _hit_loss_ratio))
+				army.lose_soldiers(_scaled_loss(army, roundi(army.count * _hit_loss_ratio)))
 				events["hit"] = true
 			warning_zone = -1
 	elif _timer >= interval:
@@ -75,7 +77,8 @@ func tick(dt: float, army: Army, ally_left: float, ally_right: float, in_range: 
 		events["warn_started"] = warning_zone
 
 	# 일반 공격: 거리 안에 있으면 정해진 간격마다 불덩이를 던진다. 던지는 순간 아군 중심이 있던 자리를 겨냥한다
-	if in_range:
+	# 구역 공격 예고 중에는 새로 던지지 않는다(예고와 겹쳐 피할 자리가 없어지는 것을 막는다). 이미 던진 것은 떨어진다
+	if in_range and warning_zone < 0:
 		_normal_timer += dt
 		if _normal_timer >= _normal_interval:
 			_normal_timer -= _normal_interval
@@ -83,7 +86,9 @@ func tick(dt: float, army: Army, ally_left: float, ally_right: float, in_range: 
 			_normal_flights.append({"t": _normal_flight, "x": target})
 			events["normal_fired"] = true
 			events["normal_target"] = target
-	# 떨어지는 순간 무리가 그 자리(반지름 안)에 걸쳐 있을 때만 병력을 잃는다. 비켜 있으면 잃지 않는다
+	# 떨어지는 순간 무리의 중심부(장수 좌우 _normal_core, 무리가 더 좁으면 무리 폭)가 그 자리에 걸쳐 있을 때만 병력을 잃는다
+	var center := (ally_left + ally_right) / 2.0
+	var core := minf((ally_right - ally_left) / 2.0, _normal_core)
 	for i in range(_normal_flights.size() - 1, -1, -1):
 		var flight: Dictionary = _normal_flights[i]
 		flight["t"] = float(flight["t"]) - dt
@@ -91,8 +96,8 @@ func tick(dt: float, army: Army, ally_left: float, ally_right: float, in_range: 
 			_normal_flights.remove_at(i)
 			var x := float(flight["x"])
 			var lost := 0
-			if minf(ally_right, x + _normal_radius) - maxf(ally_left, x - _normal_radius) > _hit_edge_tolerance:
-				lost = mini(_normal_loss, army.count)
+			if minf(center + core, x + _normal_radius) - maxf(center - core, x - _normal_radius) > _hit_edge_tolerance:
+				lost = mini(_scaled_loss(army, _normal_loss), army.count)
 				army.lose_soldiers(lost)
 			(events["normal_landed"] as Array).append({"x": x, "lost": lost})
 			events["normal_hit"] = int(events["normal_hit"]) + lost
@@ -105,6 +110,13 @@ func incoming_targets() -> Array[float]:
 	for flight in _normal_flights:
 		result.append(float(flight["x"]))
 	return result
+
+
+## 보스 공격으로 잃는 병력에도 받는 피해 배율(장수 기술, 철갑, 방어 강화)을 곱한다. 맞았으면 최소 1명은 잃는다.
+func _scaled_loss(army: Army, base: int) -> int:
+	if base <= 0:
+		return 0
+	return maxi(1, roundi(base * army.damage_taken_mult))
 
 
 func normal_radius() -> float:

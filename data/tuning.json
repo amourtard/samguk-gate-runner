@@ -135,6 +135,7 @@
 		"normal_loss": 3,
 		"normal_flight": 1.0,
 		"normal_radius": 1.6,
+		"normal_core": 0.6,
 		"normal_range": 16,
 		"ranged_hold_ratio": 0.8,
 		"enrage_ratio": 0.5,

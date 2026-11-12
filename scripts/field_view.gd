@@ -4,6 +4,8 @@ extends Node3D
 ## 소품은 판 시작부터 보스 너머까지 한 번에 MultiMesh로 뿌리고, 도로 안쪽에는 두지 않는다.
 
 
+const BACKDROP_SHADER := preload("res://assets/shaders/backdrop.gdshader")
+
 var _model_files := {}
 # 먼 산과 하늘 그림 판. 카메라와 같은 거리를 두고 따라간다
 var _backdrop: MeshInstance3D
@@ -33,11 +35,13 @@ func _setup_backdrop(sky_data: Dictionary) -> void:
 	var quad := QuadMesh.new()
 	var width := float(sky_data["backdrop_width"])
 	quad.size = Vector2(width, width * image.get_height() / image.get_width())
-	var material := StandardMaterial3D.new()
-	material.albedo_texture = image
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.disable_fog = true
-	material.disable_receive_shadows = true
+	# 그림 아래쪽을 안개 색으로 흐려서 땅 끝의 안개와 이어지게 한다(잘린 선이 보이지 않게)
+	var material := ShaderMaterial.new()
+	material.shader = BACKDROP_SHADER
+	material.set_shader_parameter("image", image)
+	material.set_shader_parameter("fade_color", Color.html(sky_data["fog_color"]))
+	material.set_shader_parameter("fade_start", float(sky_data["backdrop_fade_start"]))
+	material.set_shader_parameter("fade_end", float(sky_data["backdrop_fade_end"]))
 	quad.material = material
 	_backdrop = MeshInstance3D.new()
 	_backdrop.mesh = quad

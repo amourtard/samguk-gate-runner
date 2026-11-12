@@ -91,3 +91,13 @@ static func add_backdrop(parent: Node, name: String, index: int) -> void:
 	parent.move_child(picture, index)
 	parent.add_child(dim)
 	parent.move_child(dim, index + 1)
+
+
+## 판(PanelContainer)이나 카드 버튼에 쓸 테두리 그림 상자. kind는 ui_skin.panels 항목 이름, padding은 안쪽 여백이다.
+## 그림이 없으면 null을 돌려준다(부르는 쪽이 민무늬 상자를 그대로 쓴다).
+static func panel_box(kind: String, padding: float, tint := Color.WHITE) -> StyleBoxTexture:
+	var skin: Dictionary = DataDb.table("visual")["ui_skin"]
+	var box := texture_box(str(skin["panels"][kind]), float(skin["margin"]), tint)
+	if box != null:
+		box.set_content_margin_all(padding)
+	return box

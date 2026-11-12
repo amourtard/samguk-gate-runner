@@ -73,7 +73,8 @@ func setup(result: Dictionary, stage_id: String, can_go_next: bool) -> void:
 	panel.bg_color = Color.html(_ui["summary_back"])
 	panel.set_corner_radius_all(24)
 	panel.set_content_margin_all(32)
-	_summary_panel.add_theme_stylebox_override("panel", panel)
+	var skinned := UiText.panel_box("metal", 32.0)
+	_summary_panel.add_theme_stylebox_override("panel", skinned if skinned != null else panel)
 
 	for button in [_next_button, _retry_button]:
 		button.custom_minimum_size = Vector2(0, float(_ui["button_height"]))

@@ -185,6 +185,17 @@ func chain_mult() -> float:
 	return 1.0
 
 
+## 연환: 교전 시작 때 붙이는 불의 세기(적 무리 체력 대비 비율)와 지속 시간
+func chain_burn_ratio() -> float:
+	if has("chain"):
+		return float(_list["chain"]["burn_health_ratio"])
+	return 0.0
+
+
+func chain_burn_duration() -> float:
+	return float(_list["chain"]["burn_duration"])
+
+
 # --- 표시 ---
 
 func display_name(id: String) -> String:

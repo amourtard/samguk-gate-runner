@@ -37,7 +37,8 @@ func setup(offer: Array[String], strategy: Strategy, pick_number: int, pick_tota
 	panel.bg_color = Color.html(_ui["owned_back"])
 	panel.set_corner_radius_all(int(_ui["corner"]))
 	panel.set_content_margin_all(float(_ui["owned_padding"]))
-	_owned_panel.add_theme_stylebox_override("panel", panel)
+	var skinned := UiText.panel_box("metal", float(_ui["owned_padding"]))
+	_owned_panel.add_theme_stylebox_override("panel", skinned if skinned != null else panel)
 	for id in offer:
 		_cards.add_child(_make_card(id, strategy))
 	_fill_owned(strategy)

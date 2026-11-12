@@ -57,6 +57,11 @@ func tick(dt: float, gap: float) -> Dictionary:
 		if fire_ratio > 0.0:
 			for pool in enemies:
 				pool.take_damage(pool.total_health * fire_ratio * chain)
+		# 연환: 교전 시작 때 적 무리에 불을 붙인다(그 시점 체력의 일정 비율을 정해진 시간에 걸쳐 깎는 지속 피해)
+		var burn_ratio := _strategy.chain_burn_ratio()
+		if burn_ratio > 0.0:
+			var burn_time := _strategy.chain_burn_duration()
+			_dots.append({"rate": _enemy_health() * burn_ratio / burn_time, "time": burn_time})
 
 	# 피해는 계산 시작 시점의 병력으로 양쪽 모두 구한 뒤 한꺼번에 넣는다(동시 피해)
 	var to_enemy := 0.0

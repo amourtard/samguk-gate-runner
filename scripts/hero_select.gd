@@ -102,10 +102,13 @@ func _make_hero_card(hero_id: String, hero: Dictionary, units: Dictionary) -> Bu
 	card.custom_minimum_size = Vector2(0, float(_ui["card_height"]))
 	var normal := _style(Color.html(_ui["card_back"]), Color.html(_ui["border"]), int(_ui["border_width"]))
 	var selected := _style(Color.html(_ui["card_back_selected"]), Color.html(_ui["border_selected"]), int(_ui["border_width_selected"]))
+	# 판 그림이 있으면 고르지 않은 카드는 금속 판, 고른 카드는 금빛 테두리의 나무 판으로 그린다
+	var normal_box: StyleBox = UiText.panel_box("metal", 0.0)
+	var selected_box: StyleBox = UiText.panel_box("wood", 0.0)
 	for state in ["normal", "hover"]:
-		card.add_theme_stylebox_override(state, normal)
+		card.add_theme_stylebox_override(state, normal_box if normal_box != null else normal)
 	for state in ["pressed", "hover_pressed"]:
-		card.add_theme_stylebox_override(state, selected)
+		card.add_theme_stylebox_override(state, selected_box if selected_box != null else selected)
 
 	var row := HBoxContainer.new()
 	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

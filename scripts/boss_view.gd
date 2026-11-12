@@ -90,16 +90,32 @@ func strike_zone(zone: int) -> void:
 	material.albedo_color = Color.html(_view["bolt_color"])
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.disable_fog = true
+	# 번개 그림이 있으면 세로로 선 그림 판을, 없으면 상자 기둥을 쓴다
+	var image := UiText.texture(str(_view.get("bolt_texture", "")))
+	if image != null:
+		material.albedo_texture = image
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		material.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	for i in int(_view["bolt_count"]):
-		var box := BoxMesh.new()
-		box.size = Vector3(float(_view["bolt_width"]), height, float(_view["bolt_width"]))
 		var bolt := MeshInstance3D.new()
-		bolt.mesh = box
+		if image != null:
+			var quad := QuadMesh.new()
+			quad.size = Vector2(height * float(_view["bolt_texture_width_ratio"]), height)
+			bolt.mesh = quad
+		else:
+			var box := BoxMesh.new()
+			box.size = Vector3(float(_view["bolt_width"]), height, float(_view["bolt_width"]))
+			bolt.mesh = box
 		bolt.material_override = material
 		bolt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		bolt.position = Vector3(randf_range(range_.x, range_.y), height / 2.0, randf_range(0.0, _length))
 		add_child(bolt)
 		var tween := bolt.create_tween()
+		# 그림 번개는 좌우를 뒤집어 가며 서로 달라 보이게 한다
+		if image != null and randf() < 0.5:
+			bolt.scale.x = -1.0
 		tween.tween_property(bolt, "scale", Vector3(0.0, 1.0, 0.0), float(_view["bolt_time"]))
 		tween.tween_callback(bolt.queue_free)
 
@@ -134,6 +150,23 @@ func show_target(at: Vector3, radius: float, flight: float) -> Node3D:
 			var start := float(_view["target_start_scale"])
 			instance.scale = Vector3(start, 1.0, start)
 			instance.create_tween().tween_property(instance, "scale", Vector3.ONE, flight)
+	# 구역 예고의 붉은 면 위에서도 보이도록 밝은 테두리를 두른다
+	var ring := TorusMesh.new()
+	ring.outer_radius = radius
+	ring.inner_radius = radius - float(_view["target_ring_width"])
+	ring.rings = 32
+	ring.ring_segments = 4
+	var ring_material := StandardMaterial3D.new()
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_material.albedo_color = Color.html(_view["target_ring_color"])
+	ring_material.disable_fog = true
+	var ring_instance := MeshInstance3D.new()
+	ring_instance.mesh = ring
+	ring_instance.material_override = ring_material
+	ring_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring_instance.scale = Vector3(1.0, float(_view["target_ring_flatten"]), 1.0)
+	ring_instance.position.y = 0.02
+	marker.add_child(ring_instance)
 	return marker
 
 
