@@ -420,10 +420,12 @@ func _run_combat(delta: float) -> void:
 			print("접촉: 아군 ", army.count, " / 적 ", _combat.enemy_count())
 			_shake_time = float(_tuning["screen_shake_duration"])
 			# 접촉 순간 터지는 책략을 적 무리 위에 띄운다
-			var enemy_anchor := _damage_anchor(_enemy_groups[0].global_position)
-			_show_strategy_trigger("fire_attack", enemy_anchor)
-			_show_strategy_trigger("vanguard", enemy_anchor - Vector2(0.0, float(_visual["hud"]["delta_font_size"])))
-			_show_strategy_trigger("chain", enemy_anchor - Vector2(0.0, float(_visual["hud"]["delta_font_size"]) * 2.0))
+			# 가진 것만 차례로 위로 쌓는다. 보스에게 붙었을 때는 보스 몸과 피해 숫자를 가리지 않게 아군 무리 위에 띄운다
+			var trigger_anchor := _popup_anchor() if _enemy_groups[0].is_boss else _damage_anchor(_enemy_groups[0].global_position)
+			for id: String in ["fire_attack", "vanguard", "chain"]:
+				if _strategy.has(id):
+					_show_strategy_trigger(id, trigger_anchor)
+					trigger_anchor -= Vector2(0.0, float(_visual["hud"]["delta_font_size"]))
 		if events["ally_fired"] or events["enemy_fired"]:
 			_sfx.play("arrow")
 			# 화살이 날아가 닿을 무렵 맞는 소리를 낸다
@@ -524,7 +526,9 @@ func _run_hero_skill(delta: float) -> void:
 	var threatened := _combat != null and _combat.in_contact
 	if _in_boss_section() and _boss_pattern != null:
 		threatened = _boss_pattern.warning_zone >= 0 or not _boss_pattern.incoming_targets().is_empty()
-	var events := _hero.tick(delta, army, gap, target_count, target_is_boss, threatened)
+	var in_contact := _combat != null and _combat.in_contact
+	var ranged := float(_units[army.unit_type]["range"]) > 0.0
+	var events := _hero.tick(delta, army, gap, target_count, target_is_boss, threatened, in_contact, ranged)
 	if not events["activated"]:
 		return
 	if float(events["strike_damage"]) > 0.0 and _combat != null:

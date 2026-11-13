@@ -9,7 +9,7 @@
 		"speed_ratio": 0.5
 	},
 	"melee_engage_limit": 20,
-	"melee_engage_limit_bridge": 8,
+	"melee_engage_limit_bridge": 10,
 	"melee_engage_limit_boss": 40,
 	"ranged_fire_limit": 40,
 	"combat": {

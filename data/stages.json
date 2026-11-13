@@ -5,16 +5,16 @@
 		"gates": [15, 75, 100],
 		"enemies": [45, 125]
 	},
-	"enemy_group_weights": [0.08, 0.11, 0.14, 0.18, 0.22, 0.27],
+	"enemy_group_weights": [0.10, 0.13, 0.15, 0.18, 0.20, 0.24],
 	"boss": {
 		"unit": "boss",
 		"distance_after_last_section": 30
 	},
 	"list": [
 		{ "id": "1-1", "composition": { "infantry": 1.0 }, "enemy_total": 170, "bridge_section": 0, "boss_health": 2600 },
-		{ "id": "1-2", "composition": { "infantry": 0.7, "archer": 0.3 }, "enemy_total": 195, "bridge_section": 0, "boss_health": 2800 },
-		{ "id": "1-3", "composition": { "archer": 0.6, "infantry": 0.4 }, "enemy_total": 225, "bridge_section": 2, "boss_health": 3200 },
-		{ "id": "1-4", "composition": { "cavalry": 0.5, "infantry": 0.5 }, "enemy_total": 165, "bridge_section": 0, "boss_health": 3000 },
-		{ "id": "1-5", "composition": { "infantry": 0.4, "archer": 0.3, "cavalry": 0.3 }, "enemy_total": 220, "bridge_section": 3, "boss_health": 3000 }
+		{ "id": "1-2", "composition": { "infantry": 0.7, "archer": 0.3 }, "enemy_total": 190, "bridge_section": 0, "boss_health": 2800 },
+		{ "id": "1-3", "composition": { "archer": 0.6, "infantry": 0.4 }, "enemy_total": 215, "bridge_section": 2, "boss_health": 3200 },
+		{ "id": "1-4", "composition": { "cavalry": 0.5, "infantry": 0.5 }, "enemy_total": 160, "bridge_section": 0, "boss_health": 3000 },
+		{ "id": "1-5", "composition": { "infantry": 0.4, "archer": 0.3, "cavalry": 0.3 }, "enemy_total": 210, "bridge_section": 3, "boss_health": 3000 }
 	]
 }

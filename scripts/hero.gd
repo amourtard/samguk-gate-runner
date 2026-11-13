@@ -21,9 +21,10 @@ func _init(p_hero_id: String, hero: Dictionary) -> void:
 
 
 ## 한 번의 계산. target_gap은 전방 적 무리까지의 거리(없으면 INF), target_count는 그 무리의 병력 수,
-## target_is_boss는 그 무리가 보스인가, threatened는 지금 공격을 받고 있거나 곧 받는가(근접 교전 중, 보스 공격 예고).
+## target_is_boss는 그 무리가 보스인가, threatened는 지금 공격을 받고 있거나 곧 받는가(근접 교전 중, 보스 공격 예고),
+## in_contact는 근접 교전 중인가, ranged는 아군이 원거리 병종인가.
 ## 반환값: activated(이번에 발동했는가), strike_damage(전방 적에게 줄 피해)
-func tick(dt: float, army: Army, target_gap: float, target_count := 0, target_is_boss := false, threatened := false) -> Dictionary:
+func tick(dt: float, army: Army, target_gap: float, target_count := 0, target_is_boss := false, threatened := false, in_contact := false, ranged := true) -> Dictionary:
 	var events := {"activated": false, "strike_damage": 0.0}
 
 	# 지속 효과가 끝나면 원래대로 되돌린다
@@ -52,8 +53,10 @@ func tick(dt: float, army: Army, target_gap: float, target_count := 0, target_is
 			_apply_buff(army, true)
 			_active_left = float(_skill["duration"])
 		"focus":
-			# 적이 사거리 안에 들어올 때까지 기다린다
-			if target_gap > float(_skill.get("target_range", INF)):
+			# 원거리 병종이면 적이 사거리 안에 들어올 때까지, 근접 병종으로 바뀌어 있으면 맞붙을 때까지 기다린다
+			if ranged and target_gap > float(_skill.get("target_range", INF)):
+				return events
+			if not ranged and not in_contact:
 				return events
 			_apply_buff(army, true)
 			_active_left = float(_skill["duration"])
