@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>삼국지 게이트 러너 - 플레이 기록 분석</title>
+<style>
+  :root { --bg: #12141b; --panel: #1b1e29; --line: #343949; --text: #e6e8ee; --dim: #9ba1b3; --gold: #f2c640; --bad: #e0524a; --good: #5fbf7a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, "Malgun Gothic", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; color: var(--gold); }
+  h2 { font-size: 17px; margin: 28px 0 8px; }
+  p.note { color: var(--dim); margin: 4px 0 10px; font-size: 13px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0; }
+  input, select, button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  input { flex: 1 1 220px; min-width: 0; }
+  button { background: var(--gold); color: #1c1606; border: 0; font-weight: 600; cursor: pointer; }
+  button.plain { background: var(--panel); color: var(--text); border: 1px solid var(--line); font-weight: 400; }
+  #status { color: var(--dim); font-size: 13px; }
+  #status.error { color: var(--bad); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 12px 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .card b { display: block; font-size: 22px; color: var(--gold); }
+  .card span { color: var(--dim); font-size: 13px; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+  th { background: var(--panel); color: var(--dim); font-weight: 600; }
+  th:first-child, td:first-child { text-align: left; }
+  tr:last-child td { border-bottom: 0; }
+  td .meter { display: inline-block; width: 60px; height: 8px; background: var(--line); border-radius: 4px; margin-left: 8px; vertical-align: middle; overflow: hidden; }
+  td .meter i { display: block; height: 100%; background: var(--good); }
+  .empty { color: var(--dim); padding: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>플레이 기록 분석</h1>
+  <p class="note">삼국지 게이트 러너 테스트 빌드에서 모은 익명 기록이다. 내려받기 토큰(EXPORT_TOKEN)이 있어야 볼 수 있다.</p>
+  <div class="bar">
+    <input id="token" type="password" placeholder="내려받기 토큰" autocomplete="off">
+    <button id="load">불러오기</button>
+    <select id="build" hidden></select>
+    <button id="forget" class="plain" hidden>토큰 지우기</button>
+  </div>
+  <div id="status"></div>
+  <div id="report"></div>
+</main>
+<script>
+"use strict";
+// 서버(/api/export)에서 기록을 받아 브라우저에서 집계한다. tools/analyze_logs.py와 같은 계산이다.
+const PAGE = 5000;
+const TOKEN_KEY = "samguk_export_token";
+const NAMES = {
+  guan_yu: "관우", zhang_fei: "장비", zhuge_liang: "제갈량",
+  conscription: "징병", volunteers: "의병", wide_formation: "횡진", picked_troops: "정병", iron_armor: "철갑",
+  vanguard: "선봉", fire_arrows: "불화살", fire_attack: "화계", chain: "연환",
+  reinforce: "증원", empower: "강화", switch: "전환", trap: "함정", gamble: "도박",
+  next: "다음 스테이지", retry: "다시 도전", heroes: "장수 선택", upgrades: "강화",
+};
+const label = key => NAMES[key] || key || "-";
+const $ = id => document.getElementById(id);
+let allEvents = [];
+
+function median(values) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+const percent = (part, whole) => whole ? Math.round(100 * part / whole) + "%" : "-";
+const count = () => new Map();
+const add = (map, key, by = 1) => map.set(key, (map.get(key) || 0) + by);
+const push = (map, key, value) => { if (!map.has(key)) map.set(key, []); map.get(key).push(value); };
+const escapeHtml = text => String(text).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const stageOrder = (a, b) => a.localeCompare(b, undefined, { numeric: true });
+
+// part/whole을 "3/9 (33%)"와 막대로 보여준다
+function rate(part, whole) {
+  if (!whole) return "-";
+  const p = Math.round(100 * part / whole);
+  return `${part}/${whole} (${p}%)<span class="meter"><i style="width:${p}%"></i></span>`;
+}
+
+function table(header, rows) {
+  if (rows.length === 0) return '<div class="empty">아직 기록이 없다</div>';
+  const head = "<tr>" + header.map(h => `<th>${escapeHtml(h)}</th>`).join("") + "</tr>";
+  const body = rows.map(row => "<tr>" + row.map(cell => `<td>${cell}</td>`).join("") + "</tr>").join("");
+  return `<div class="scroll"><table>${head}${body}</table></div>`;
+}
+
+function normalize(row) {
+  let data = row.data || {};
+  if (typeof data === "string") { try { data = JSON.parse(data); } catch { data = {}; } }
+  return {
+    time: Number(row.client_time || row.time || 0), player: row.player || "", session: row.session || "",
+    run: row.run || "", type: row.type || "", stage: row.stage || "", hero: row.hero || "", build: row.build || "",
+    received: row.received_at || "", data,
+  };
+}
+
+function render(build) {
+  const events = allEvents.filter(e => !build || e.build === build).sort((a, b) => a.time - b.time);
+  const byType = new Map();
+  for (const event of events) push(byType, event.type, event);
+  const of = type => byType.get(type) || [];
+  const starts = new Map(of("run_start").map(e => [e.run, e]));
+  const ends = new Map(of("run_end").map(e => [e.run, e]));
+  const out = [];
+
+  const players = new Set(events.map(e => e.player));
+  const cleared = [...ends.values()].filter(e => e.data.cleared).length;
+  const last = events.length ? new Date(events[events.length - 1].time).toLocaleString("ko-KR") : "-";
+  out.push(`<div class="cards">
+    <div class="card"><b>${players.size}</b><span>사람(기기)</span></div>
+    <div class="card"><b>${starts.size}</b><span>판</span></div>
+    <div class="card"><b>${percent(cleared, ends.size)}</b><span>돌파율</span></div>
+    <div class="card"><b>${events.length}</b><span>사건</span></div>
+    <div class="card"><b style="font-size:15px">${escapeHtml(last)}</b><span>마지막 기록</span></div>
+  </div>`);
+
+  // 사람당 판 수: 30판을 채우는 사람이 있는가
+  const runsByPlayer = count();
+  for (const e of of("run_start")) add(runsByPlayer, e.player);
+  const counts = [...runsByPlayer.values()].sort((a, b) => b - a);
+  const buckets = [["1판", 1, 1], ["2~4판", 2, 4], ["5~9판", 5, 9], ["10~29판", 10, 29], ["30판 이상", 30, Infinity]];
+  out.push("<h2>사람당 판 수</h2>", `<p class="note">중앙값 ${median(counts)}판, 최대 ${counts[0] || 0}판. 검증 기준은 30판을 해도 재미있는가이다.</p>`,
+    table(["판 수", "사람"], buckets.map(([name, low, high]) => [name, counts.filter(c => c >= low && c <= high).length])));
+
+  const unfinished = [...starts.keys()].filter(run => !ends.has(run)).length;
+  out.push("<h2>끝까지 가지 않은 판</h2>", `<p class="note">시작 ${starts.size}판 중 끝 기록이 없는 판 ${unfinished}판 (${percent(unfinished, starts.size)}). 중간에 창을 닫았거나 기록이 오지 않은 판이다.</p>`);
+
+  // 스테이지와 장수별 돌파율
+  const grid = new Map();
+  const bump = (key, win) => { const cell = grid.get(key) || [0, 0]; cell[0] += win ? 1 : 0; cell[1] += 1; grid.set(key, cell); };
+  const heroSet = new Set(), stageSet = new Set();
+  for (const end of ends.values()) {
+    bump(end.stage + "|" + end.hero, end.data.cleared); bump(end.stage + "|전체", end.data.cleared);
+    heroSet.add(end.hero); stageSet.add(end.stage);
+  }
+  const heroes = [...heroSet].sort().concat("전체");
+  const stages = [...stageSet].sort(stageOrder);
+  out.push("<h2>스테이지와 장수별 돌파율</h2>", table(["스테이지", ...heroes.map(label)],
+    stages.map(stage => [escapeHtml(stage), ...heroes.map(h => rate(...(grid.get(stage + "|" + h) || [0, 0])))])));
+
+  // 진 판이 끝난 구간
+  const lost = count();
+  for (const end of ends.values()) {
+    if (end.data.cleared) continue;
+    const where = end.data.section > end.data.sections ? "보스전" : "구간 " + end.data.section;
+    add(lost, end.stage + "|" + where);
+  }
+  out.push("<h2>진 판이 끝난 구간</h2>", table(["스테이지", "끝난 곳", "판"],
+    [...lost.entries()].sort((a, b) => stageOrder(a[0], b[0])).map(([key, n]) => [...key.split("|").map(escapeHtml), n])));
+
+  // 판 길이
+  const lengths = new Map();
+  for (const end of ends.values()) push(lengths, end.stage + "|" + (end.data.cleared ? "돌파" : "패배"), end.data.seconds || 0);
+  out.push("<h2>판 길이(초)</h2>", table(["스테이지", "결과", "판", "중앙값", "최소", "최대"],
+    [...lengths.entries()].sort((a, b) => stageOrder(a[0], b[0])).map(([key, v]) =>
+      [...key.split("|").map(escapeHtml), v.length, Math.round(median(v)), Math.round(Math.min(...v)), Math.round(Math.max(...v))])));
+
+  // 책략: 나왔을 때 고른 비율, 가진 판의 돌파율
+  const offered = count(), chosen = count(), owned = new Map();
+  for (const e of of("strategy_pick")) {
+    for (const name of e.data.offer || []) add(offered, name);
+    add(chosen, e.data.chosen);
+  }
+  for (const end of ends.values()) {
+    for (const name of new Set(end.data.strategies || [])) {
+      const cell = owned.get(name) || [0, 0]; cell[0] += end.data.cleared ? 1 : 0; cell[1] += 1; owned.set(name, cell);
+    }
+  }
+  out.push("<h2>책략</h2>", table(["책략", "나온 횟수", "고른 횟수", "고른 비율", "가진 판의 돌파율"],
+    [...offered.keys()].sort((a, b) => (chosen.get(b) || 0) - (chosen.get(a) || 0)).map(name =>
+      [label(name), offered.get(name), chosen.get(name) || 0, percent(chosen.get(name) || 0, offered.get(name)), rate(...(owned.get(name) || [0, 0]))])));
+
+  // 게이트: 그 종류가 한쪽에 나왔을 때 골라진 비율
+  const shown = count(), picked = count(), change = new Map();
+  for (const e of of("gate")) {
+    const kinds = [String(e.data.chosen || "").split(":")[0], String(e.data.other || "").split(":")[0]];
+    for (const kind of new Set(kinds)) add(shown, kind);
+    add(picked, kinds[0]);
+    push(change, String(e.data.chosen || ""), (e.data.after || 0) - (e.data.before || 0));
+  }
+  out.push("<h2>게이트</h2>", table(["종류", "나온 횟수", "고른 횟수", "고른 비율"],
+    [...shown.keys()].sort((a, b) => shown.get(b) - shown.get(a)).map(kind => [label(kind), shown.get(kind), picked.get(kind) || 0, rate(picked.get(kind) || 0, shown.get(kind))])));
+  out.push('<p class="note">고른 칸별 병력 변화(중앙값)</p>', table(["칸", "고른 횟수", "병력 변화 중앙값"],
+    [...change.entries()].sort((a, b) => b[1].length - a[1].length).map(([name, v]) => {
+      const m = Math.round(median(v));
+      return [escapeHtml(label(name.split(":")[0]) + (name.includes(":") ? " " + name.split(":")[1] : "")), v.length, (m > 0 ? "+" : "") + m];
+    })));
+
+  // 적 무리 교전: 너무 짧지 않은가
+  const fights = new Map();
+  for (const e of of("group_end")) push(fights, e.stage + "|" + (e.data.section || 0), e.data);
+  out.push("<h2>적 무리 교전</h2>", table(["스테이지", "구간", "무리 수", "적 수 중앙값", "접촉 후 걸린 시간 중앙값(초)", "닿기 전에 잡은 비율", "잃은 병력 중앙값"],
+    [...fights.entries()].sort((a, b) => stageOrder(a[0], b[0])).map(([key, items]) => {
+      const contact = items.map(d => d.contact_seconds).filter(s => s >= 0);
+      return [...key.split("|").map(escapeHtml), items.length, Math.round(median(items.map(d => d.enemies || 0))),
+        contact.length ? median(contact).toFixed(1) : "-", percent(items.length - contact.length, items.length),
+        Math.round(median(items.map(d => (d.before || 0) - (d.after || 0))))];
+    })));
+
+  // 보스전
+  const boss = new Map();
+  for (const e of of("boss_end")) push(boss, e.stage + "|" + e.hero, e.data);
+  const sum = (items, key) => items.reduce((total, d) => total + (d[key] || 0), 0);
+  out.push("<h2>보스전</h2>", table(["스테이지", "장수", "보스전 수", "승률", "도달 병력 중앙값", "길이 중앙값(초)", "구역 공격에 맞은 비율", "불덩이에 맞은 비율"],
+    [...boss.entries()].sort((a, b) => stageOrder(a[0], b[0])).map(([key, items]) => {
+      const [stage, hero] = key.split("|");
+      return [escapeHtml(stage), label(hero), items.length, percent(items.filter(d => d.cleared).length, items.length),
+        Math.round(median(items.map(d => d.count_start || 0))), Math.round(median(items.map(d => d.seconds || 0))),
+        percent(sum(items, "zone_hits"), sum(items, "zones")), percent(sum(items, "fireball_hits"), sum(items, "fireballs"))];
+    })));
+
+  const actions = count();
+  for (const e of of("result_action")) add(actions, e.data.action);
+  out.push("<h2>결과 화면에서 누른 버튼</h2>", table(["버튼", "횟수"], [...actions.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => [label(k), n])));
+  const upgrades = count();
+  for (const e of of("upgrade_buy")) add(upgrades, e.data.id);
+  out.push("<h2>강화 구매</h2>", table(["시설", "횟수"], [...upgrades.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => [escapeHtml(k), n])));
+
+  $("report").innerHTML = out.join("\n");
+}
+
+async function load() {
+  const token = $("token").value.trim();
+  if (!token) return;
+  const status = $("status");
+  status.className = "";
+  status.textContent = "불러오는 중...";
+  try {
+    const rows = [];
+    let after = 0;
+    while (true) {
+      const query = new URLSearchParams({ token, after: String(after), limit: String(PAGE) });
+      const response = await fetch("/api/export?" + query);
+      if (response.status === 401) throw new Error("토큰이 맞지 않는다");
+      if (!response.ok) throw new Error("서버 오류 " + response.status);
+      const page = await response.json();
+      rows.push(...page.rows);
+      status.textContent = `불러오는 중... ${rows.length}개`;
+      if (!page.next) break;
+      after = page.next;
+    }
+    try { sessionStorage.setItem(TOKEN_KEY, token); } catch {}
+    allEvents = rows.map(normalize);
+    const builds = [...new Set(allEvents.map(e => e.build))].sort().reverse();
+    const select = $("build");
+    select.innerHTML = '<option value="">모든 빌드</option>' + builds.map(b => `<option>${escapeHtml(b)}</option>`).join("");
+    select.hidden = false;
+    $("forget").hidden = false;
+    status.textContent = `사건 ${rows.length}개를 받았다 (${new Date().toLocaleTimeString("ko-KR")})`;
+    render("");
+  } catch (error) {
+    status.className = "error";
+    status.textContent = error.message;
+  }
+}
+
+$("load").addEventListener("click", load);
+$("token").addEventListener("keydown", event => { if (event.key === "Enter") load(); });
+$("build").addEventListener("change", event => render(event.target.value));
+$("forget").addEventListener("click", () => {
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  location.reload();
+});
+// 같은 탭에서 새로 고치면 토큰을 다시 묻지 않는다
+try {
+  const saved = sessionStorage.getItem(TOKEN_KEY);
+  if (saved) { $("token").value = saved; load(); }
+} catch {}
+</script>
+</body>
+</html>
