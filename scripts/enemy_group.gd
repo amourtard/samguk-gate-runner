@@ -28,7 +28,8 @@ func setup(composition: Dictionary, units: Dictionary, tuning: Dictionary, visua
 		if not composition.has(unit_type):
 			continue
 		var count := int(composition[unit_type])
-		var health := health_override if health_override > 0.0 else float(units[unit_type]["health"])
+		# 일반 적은 병종 체력에 배율을 곱한다(교전이 접촉 순간에 끝나지 않게). 보스는 정해 준 체력을 그대로 쓴다
+		var health := health_override if health_override > 0.0 else float(units[unit_type]["health"]) * float(tuning["combat"].get("enemy_health_mult", 1.0))
 		var pool := Army.new(unit_type, health, count)
 		pools.append(pool)
 

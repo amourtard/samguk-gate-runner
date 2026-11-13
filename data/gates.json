@@ -12,7 +12,7 @@
 	"switch": {
 		"name": "병종 전환",
 		"color": "#2fa84f",
-		"loss_ratio": 0.2
+		"loss_ratio": 0
 	},
 	"empower": {
 		"name": "강화",

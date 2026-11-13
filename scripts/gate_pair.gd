@@ -278,7 +278,7 @@ func _texts(spec: Dictionary, gates: Dictionary, units: Dictionary) -> Dictionar
 				return {"main": "+%d" % int(option["add"]), "cost": ""}
 			return {"main": "×%d" % int(option["mult"]), "cost": ""}
 		"switch":
-			return {"main": "%s 전환" % units[spec["unit"]]["name"], "cost": "병력 -%d%%" % _percent(data["loss_ratio"])}
+			return {"main": "%s 전환" % units[spec["unit"]]["name"], "cost": "병력 -%d%%" % _percent(data["loss_ratio"]) if float(data["loss_ratio"]) > 0.0 else ""}
 		"empower":
 			var option: Dictionary = data["options"][spec["option"]]
 			var effect := ""

@@ -42,6 +42,7 @@ func _setup_backdrop(sky_data: Dictionary) -> void:
 	material.set_shader_parameter("fade_color", Color.html(sky_data["fog_color"]))
 	material.set_shader_parameter("fade_start", float(sky_data["backdrop_fade_start"]))
 	material.set_shader_parameter("fade_end", float(sky_data["backdrop_fade_end"]))
+	material.set_shader_parameter("tint", Color.html(sky_data.get("backdrop_tint", "#ffffff")))
 	quad.material = material
 	_backdrop = MeshInstance3D.new()
 	_backdrop.mesh = quad
@@ -83,6 +84,7 @@ func _setup_light(light: DirectionalLight3D, environment: Environment, visual: D
 	var data: Dictionary = visual["light"]
 	light.rotation = Vector3(deg_to_rad(float(data["pitch_deg"])), deg_to_rad(float(data["yaw_deg"])), 0.0)
 	light.light_energy = float(data["energy"])
+	light.light_color = Color.html(data.get("color", "#ffffff"))
 	light.shadow_enabled = bool(data["shadow"])
 	light.directional_shadow_max_distance = float(data["shadow_max_distance"])
 	light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS

@@ -187,7 +187,7 @@ func _ready() -> void:
 	if not (plan["bridge"] as Dictionary).is_empty():
 		var margin := float(_visual["bridge"]["bank"])
 		clear_ranges.append(Vector2(float(plan["bridge"]["start"]) - margin, float(plan["bridge"]["end"]) + margin))
-	field.setup(_environment, _light, float(plan["boss"]["distance"]), _road_width, _visual, clear_ranges)
+	field.setup(_environment, _light, float(plan["boss"]["distance"]), _road_width, _mood_visual(), clear_ranges)
 
 	_hud.setup(army, _units, _tuning, _visual, _hero.name)
 	_sfx.setup(_tuning)
@@ -515,7 +515,16 @@ func _run_hero_skill(delta: float) -> void:
 	var gap := INF
 	if not _enemy_groups.is_empty():
 		gap = maxf(_gap_to_front_enemy(), 0.0)
-	var events := _hero.tick(delta, army, gap)
+	var target_count := 0
+	var target_is_boss := false
+	if not _enemy_groups.is_empty():
+		target_count = _enemy_groups[0].total_count()
+		target_is_boss = _enemy_groups[0].is_boss
+	# 공격을 받는 중인가: 일반 구간은 근접 교전 중, 보스 구간은 구역 공격 예고나 불덩이가 날아오는 중
+	var threatened := _combat != null and _combat.in_contact
+	if _in_boss_section() and _boss_pattern != null:
+		threatened = _boss_pattern.warning_zone >= 0 or not _boss_pattern.incoming_targets().is_empty()
+	var events := _hero.tick(delta, army, gap, target_count, target_is_boss, threatened)
 	if not events["activated"]:
 		return
 	if float(events["strike_damage"]) > 0.0 and _combat != null:
@@ -874,7 +883,7 @@ func _flush_damage_number() -> void:
 	_damage_accum = 0.0
 	if value <= 0 or _enemy_groups.is_empty():
 		return
-	_hud.show_damage(value, _damage_anchor(_enemy_groups[0].global_position))
+	_hud.show_damage(value, _damage_anchor(_damage_base(_enemy_groups[0])))
 
 
 ## 장수 공격 기술의 피해를 여러 개로 나눠 맞은 적 무리 위에 흩뿌린다. 합계는 실제 피해 × 표시 배율이다.
@@ -899,7 +908,25 @@ func _show_strike_numbers(dealt: float, group: EnemyGroup) -> void:
 		if value <= 0:
 			continue
 		var offset := Vector3(_rng.randf_range(-scatter, scatter), _rng.randf_range(0.0, scatter), _rng.randf_range(-scatter, scatter))
-		_hud.show_damage(value, _damage_anchor(group.global_position + offset))
+		_hud.show_damage(value, _damage_anchor(_damage_base(group) + offset))
+
+
+## 스테이지마다 다른 하늘, 안개, 조명 색조를 덮어쓴 표시 값(visual.json의 stage_moods). 계산과 무관하다.
+func _mood_visual() -> Dictionary:
+	var moods: Dictionary = _visual["stage_moods"]
+	var order: Array = moods["order"]
+	var mood: Dictionary = moods["list"][order[GameState.stage_index % order.size()]]
+	var mixed := _visual.duplicate()
+	for part in ["sky", "light"]:
+		mixed[part] = (_visual[part] as Dictionary).merged(mood.get(part, {}), true)
+	return mixed
+
+
+## 피해 숫자를 띄울 기준 위치. 보스는 가슴 높이에 띄워 그 앞에 선 아군의 병력 숫자와 겹치지 않게 한다
+func _damage_base(group: EnemyGroup) -> Vector3:
+	if group.is_boss:
+		return group.global_position + Vector3.UP * _boss_height * float(_visual["boss_view"]["damage_height_ratio"])
+	return group.global_position
 
 
 ## 적 무리 머리 위의 화면 좌표

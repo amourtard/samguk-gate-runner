@@ -5,7 +5,7 @@
 			"name": "관우",
 			"unit": "cavalry",
 			"count": 12,
-			"skill": { "type": "strike", "interval": 15, "damage_per_soldier": 5, "target_range": 20 },
+			"skill": { "type": "strike", "interval": 15, "damage_per_soldier": 5, "target_range": 20, "min_targets": 8 },
 			"skill_desc": "{interval}초마다 전방 적 무리에 병력 수 × {damage_per_soldier} 피해",
 			"skill_name": "청룡 돌격",
 			"skill_short": "앞의 적 무리를 강하게 친다"
@@ -23,7 +23,7 @@
 			"name": "제갈량",
 			"unit": "archer",
 			"count": 12,
-			"skill": { "type": "focus", "interval": 18, "duration": 4, "range_bonus": 0.5, "attack_speed_bonus": 0.5 },
+			"skill": { "type": "focus", "interval": 18, "duration": 4, "range_bonus": 0.5, "attack_speed_bonus": 0.5, "target_range": 18 },
 			"skill_desc": "{interval}초마다 {duration}초간 사거리와 공격속도 +{range_bonus_pct}%",
 			"skill_name": "신산 지휘",
 			"skill_short": "잠깐 동안 궁병이 더 멀리, 더 빨리 쏜다"

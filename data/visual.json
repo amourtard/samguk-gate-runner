@@ -281,6 +281,7 @@
 	"boss_view": {
 		"portrait": "res://assets/portraits/zhang_jiao.png",
 		"portrait_size": 84,
+		"damage_height_ratio": 0.65,
 		"warn_alpha_start": 0.08,
 		"flash_color": "#fff2e0e6",
 		"flash_time": 0.3,
@@ -514,6 +515,24 @@
 		"notice_font_size": 30,
 		"notice_color": "#c8ccd8",
 		"notice_outline": 8
+	},
+	"stage_moods": {
+		"order": ["day", "day", "mist", "sunset", "dusk"],
+		"list": {
+			"day": {},
+			"mist": {
+				"sky": { "top": "#7f9fb8", "horizon": "#cdd8dc", "ground_horizon": "#cdd8dc", "ground_bottom": "#cdd8dc", "fog_color": "#cdd8dc", "fog_begin": 38, "fog_end": 130, "backdrop_tint": "#b9c8d0" },
+				"light": { "energy": 0.92, "color": "#eef4ff", "ambient_color": "#e6eef5" }
+			},
+			"sunset": {
+				"sky": { "top": "#d9824f", "horizon": "#f4cfa4", "ground_horizon": "#f4cfa4", "ground_bottom": "#f4cfa4", "fog_color": "#f4cfa4", "backdrop_tint": "#ffbf8f" },
+				"light": { "energy": 1.05, "color": "#ffdfba", "ambient_color": "#fff0e0", "pitch_deg": -34 }
+			},
+			"dusk": {
+				"sky": { "top": "#5a3a5f", "horizon": "#dcae9e", "ground_horizon": "#dcae9e", "ground_bottom": "#dcae9e", "fog_color": "#dcae9e", "backdrop_tint": "#e0a08c" },
+				"light": { "energy": 1.0, "color": "#ffc4a6", "ambient_color": "#ecd6dc", "pitch_deg": -28 }
+			}
+		}
 	},
 	"ui_skin": {
 		"margin": 24,

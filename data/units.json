@@ -23,7 +23,7 @@
 		"health": 14,
 		"dps": 3,
 		"range": 0,
-		"charge_damage": 8,
+		"charge_damage": 5,
 		"strong_against": "archer"
 	},
 	"boss": {

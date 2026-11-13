@@ -16,6 +16,7 @@
 		"tick": 0.1,
 		"contact_distance": 1,
 		"advantage_multiplier": 1.5,
+		"enemy_health_mult": 1.6,
 		"front_order": ["infantry", "cavalry", "archer", "boss"]
 	},
 	"soldier_display_limit": 200,

@@ -7,8 +7,10 @@ uniform vec3 fade_color : source_color = vec3(0.84, 0.9, 0.94);
 // 그림 위에서부터 잰 세로 위치(0~1). fade_start부터 흐려지기 시작해 fade_end에서 완전히 안개 색이 된다
 uniform float fade_start = 0.5;
 uniform float fade_end = 0.8;
+// 스테이지 색조(노을, 황혼)를 그림에 곱한다
+uniform vec3 tint : source_color = vec3(1.0);
 
 void fragment() {
-	vec3 color = texture(image, UV).rgb;
+	vec3 color = texture(image, UV).rgb * tint;
 	ALBEDO = mix(color, fade_color, smoothstep(fade_start, fade_end, UV.y));
 }

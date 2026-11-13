@@ -57,7 +57,7 @@
 		"vanguard": {
 			"name": "선봉",
 			"family": "elite",
-			"contact_damage_per_soldier": 4,
+			"contact_damage_per_soldier": 3,
 			"charge_mult": 2,
 			"desc": "첫 접촉 피해 추가(병력 수 × {contact_damage_per_soldier})\n기병은 돌격 피해 ×{charge_mult}"
 		},

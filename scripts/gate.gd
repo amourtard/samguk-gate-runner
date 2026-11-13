@@ -96,6 +96,9 @@ static func label(spec: Dictionary, gates: Dictionary, units: Dictionary) -> Str
 				return "+%d" % int(option["add"])
 			return "×%d" % int(option["mult"])
 		"switch":
+			# 손실이 없으면 대가를 적지 않는다
+			if float(data["loss_ratio"]) <= 0.0:
+				return "%s 전환" % units[spec["unit"]]["name"]
 			return "%s 전환\n병력 -%d%%" % [units[spec["unit"]]["name"], _percent(data["loss_ratio"])]
 		"empower":
 			var option: Dictionary = data["options"][spec["option"]]

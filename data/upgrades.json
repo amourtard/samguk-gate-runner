@@ -4,14 +4,14 @@
 		"barracks": {
 			"name": "병영",
 			"stat": "start_count",
-			"per_level": 2,
+			"per_level": 4,
 			"cost_base": 100,
 			"effect": "시작 병력 +{value}명"
 		},
 		"armory": {
 			"name": "무기고",
 			"stat": "attack",
-			"per_level": 0.05,
+			"per_level": 0.1,
 			"cost_base": 150,
 			"effect": "공격력 +{value}%",
 			"percent": true
