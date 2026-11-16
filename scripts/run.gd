@@ -1597,6 +1597,8 @@ func _run_encircle_boss(delta: float) -> void:
 		var to_hero := _hero_pos2d - boss_pos
 		if to_hero.length() > float(data["boss_keep_distance"]):
 			boss_pos += to_hero.normalized() * float(data["boss_speed"]) * delta
+			# 벽에 붙으면 그 뒤로 돌아갈 틈이 없어 감쌀 수 없다. 벽에서 정해진 거리만큼 안쪽에 머물게 한다
+			boss_pos = _encircle.clamp_to_arena(boss_pos, _arena_center, float(data["boss_wall_margin"]))
 			_boss_group.position = Vector3(boss_pos.x, 0.0, boss_pos.y)
 
 	# 호위병은 장수를 쫓고, 장수나 꼬리에 닿아 있는 동안 정해진 간격으로 병사를 쓰러뜨린다
@@ -1606,6 +1608,7 @@ func _run_encircle_boss(delta: float) -> void:
 			continue
 		var at := Vector2(escort.position.x, escort.position.z)
 		at += (_hero_pos2d - at).normalized() * float(data["escort_speed"]) * delta
+		at = _encircle.clamp_to_arena(at, _arena_center, float(data["escort_wall_margin"]))
 		escort.position = Vector3(at.x, 0.0, at.y)
 		var key := escort.get_instance_id()
 		if EncircleScript.is_hit(at, float(data["escort_contact"]), _hero_pos2d, _trail_nodes):

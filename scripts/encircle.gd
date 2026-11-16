@@ -152,10 +152,10 @@ func register_loop(boss_enclosed: bool) -> void:
 		_stun_left = float(_data["stun"])
 
 
-## 보스를 포위했을 때의 피해. 병력 수에 비례하고 최소값이 있다. 책략은 화면의 설명대로만 적용한다.
+## 보스를 포위했을 때의 피해. 기본값에 병력 수에 비례하는 몫을 더한다(병력이 한 명 늘 때마다 피해가 는다). 책략은 화면의 설명대로만 적용한다.
 ## register_loop보다 먼저 부른다(첫 포위인지 본다).
 func loop_damage(army: Army, boss: Army) -> float:
-	var damage := maxf(army.count * float(_data["loop_damage_per_soldier"]) * army.attack_mult, float(_data["loop_min_damage"]))
+	var damage := float(_data["loop_base_damage"]) + army.count * float(_data["loop_damage_per_soldier"]) * army.attack_mult
 	if not _first_loop_done:
 		_first_loop_done = true
 		# 선봉과 기병 돌격: 첫 접촉 피해를 첫 포위에 싣는다(근접 동시 교전 수까지)
@@ -319,7 +319,8 @@ static func is_hit(pos: Vector2, radius: float, head: Vector2, nodes: PackedVect
 
 ## 맞았을 때 잃는 병력. 받는 피해 배율(장수 기술, 철갑, 방어 강화)을 곱하고, 맞았으면 최소 1명은 잃는다.
 func loss(kind: String, army: Army) -> int:
-	var base := float(_boss_data["normal_loss"])
+	# 불덩이는 정해진 명수를 잃되, 병력이 적을 때 한 번에 거의 다 잃지 않도록 병력의 hit_loss_ratio까지만 잃는다
+	var base := minf(float(_boss_data["normal_loss"]), maxf(army.count * float(_boss_data["hit_loss_ratio"]), 1.0))
 	if kind == "zone":
 		base = army.count * float(_boss_data["hit_loss_ratio"]) * float(_data["zone_loss_mult"])
 	return mini(maxi(1, roundi(base * army.damage_taken_mult)), army.count)
