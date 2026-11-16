@@ -96,46 +96,46 @@ func advance(dt: float) -> void:
 	_stun_left = maxf(_stun_left - dt, 0.0)
 
 
-## 장수가 다가가면 고리가 닫히는 꼬리 마디의 번호. 없으면 -1.
-## 장수에서 길을 따라 loop_min_length보다 멀고, 마지막 포위 뒤로 새로 달린 길 위에 있는 마디만 된다.
-func closing_node(head: Vector2, nodes: PackedVector2Array, shown: int, within: float) -> int:
-	var gap := spacing(shown)
-	var best := -1
-	var best_distance := within
-	for i in nodes.size():
-		var along := (i + 1) * gap
-		if along < float(_data["loop_min_length"]):
-			continue
-		if along > _fresh_length:
-			break
-		var distance := head.distance_to(nodes[i])
-		if distance <= best_distance:
-			best_distance = distance
-			best = i
-	return best
-
-
-## 지금 닫힌 고리(다각형). 닫히지 않았거나 재사용 대기 중이면 빈 배열.
-## 고리는 병사가 선 자리만이 아니라 장수가 실제로 달린 길(trail)로 만든다(병사가 적어 마디가 드물어도 모양이 맞게).
-func closed_loop(head: Vector2, nodes: PackedVector2Array, trail: PackedVector2Array, shown: int) -> PackedVector2Array:
+## 장수가 다가가면 고리가 닫히는 꼬리 위의 자리. 없으면 빈 사전, 있으면 {"pos": 자리, "loop": 그 자리까지의 고리}.
+## 꼬리는 병사가 선 자리만이 아니라 장수가 달린 길(trail, 바닥의 띠) 전체로 본다. 병사가 적어 마디가 드물어도 띠를 건드리면 닫힌다.
+## 조건: 장수에서 길을 따라 loop_min_length보다 멀고, 꼬리 길이 안이고, 마지막 포위 뒤로 새로 달린 길 위에 있고,
+## 그 자리까지의 고리가 targets(보스와 호위병의 위치) 중 하나라도 감싼다.
+## 감싸지 않는 가까운 자리를 먼저 잡으면 보스를 다 감싸고도 포위가 되지 않으므로 감싸는 자리 중 가장 가까운 것을 고른다.
+func closing_point(head: Vector2, trail: PackedVector2Array, shown: int, within: float, targets: Array[Vector2]) -> Dictionary:
+	var limit := minf(ranks(shown) * spacing(shown), _fresh_length)
 	var loop := PackedVector2Array()
-	if _cooldown > 0.0:
-		return loop
-	var index := closing_node(head, nodes, shown, float(_data["loop_close_distance"]))
-	if index < 0:
-		return loop
-	var length := (index + 1) * spacing(shown)
 	loop.append(head)
+	var best := {}
+	var best_distance := within
 	var walked := 0.0
 	var previous := head
 	for point in trail:
 		walked += previous.distance_to(point)
-		if walked > length:
+		if walked > limit:
 			break
 		loop.append(point)
 		previous = point
-	loop.append(nodes[index])
-	return loop
+		if walked < float(_data["loop_min_length"]):
+			continue
+		var distance := head.distance_to(point)
+		if distance > best_distance:
+			continue
+		for target in targets:
+			if encloses(loop, target):
+				best_distance = distance
+				best = {"pos": point, "loop": loop.duplicate()}
+				break
+	return best
+
+
+## 지금 닫힌 고리(다각형). 닫히지 않았거나 재사용 대기 중이면 빈 배열.
+func closed_loop(head: Vector2, trail: PackedVector2Array, shown: int, targets: Array[Vector2]) -> PackedVector2Array:
+	if _cooldown > 0.0:
+		return PackedVector2Array()
+	var found := closing_point(head, trail, shown, float(_data["loop_close_distance"]), targets)
+	if found.is_empty():
+		return PackedVector2Array()
+	return found["loop"]
 
 
 ## 고리 안에 그 점이 있는가. 보스는 중심이 고리 안에 있어야 포위다.
@@ -251,7 +251,7 @@ func check_enrage(health_ratio: float) -> bool:
 ## 이번 프레임에 시작할 공격 목록. 멈춰 있는(포위당한) 동안에는 공격하지 않는다.
 ## 모든 공격은 장수가 달려갈 앞쪽을 겨냥한다. 방향을 틀면 피할 수 있고, 꼬리는 장수가 지나간 길만 따라오므로 같이 피한다.
 ## 반환값의 항목: {"kind": "zone" 또는 "orb", "pos": 떨어질 자리, "radius": 반지름, "time": 떨어질 때까지 남은 시간}
-func start_attacks(dt: float, head: Vector2, heading: float, speed: float, nodes: PackedVector2Array, arena_center: Vector2, rng: RandomNumberGenerator) -> Array[Dictionary]:
+func start_attacks(dt: float, head: Vector2, heading: float, speed: float, nodes: PackedVector2Array, shown: int, arena_center: Vector2, rng: RandomNumberGenerator) -> Array[Dictionary]:
 	var attacks: Array[Dictionary] = []
 	if is_stunned():
 		return attacks
@@ -266,7 +266,7 @@ func start_attacks(dt: float, head: Vector2, heading: float, speed: float, nodes
 		var ahead := head + forward * speed * warn * float(_data["zone_lead"])
 		var side := forward.orthogonal() * (radius * float(_data["zone_side_offset"])) * (1.0 if rng.randf() < 0.5 else -1.0)
 		for target: Vector2 in [ahead, ahead + side]:
-			var spot := _clear_spot(target, radius, head, nodes, arena_center)
+			var spot := _clear_spot(target, radius, warn, speed, head, nodes, shown, arena_center)
 			if spot != Vector2.INF:
 				attacks.append({"kind": "zone", "pos": spot, "radius": radius, "time": warn})
 	_orb_timer -= dt * rate
@@ -275,24 +275,35 @@ func start_attacks(dt: float, head: Vector2, heading: float, speed: float, nodes
 		var flight := float(_boss_data["normal_flight"])
 		var radius := float(_boss_data["normal_radius"])
 		var target := head + forward * speed * flight * float(_data["orb_lead"])
-		var spot := _clear_spot(target, radius, head, nodes, arena_center)
+		var spot := _clear_spot(target, radius, flight, speed, head, nodes, shown, arena_center)
 		if spot != Vector2.INF:
 			attacks.append({"kind": "orb", "pos": spot, "radius": radius, "time": flight})
 	return attacks
 
 
-## 공격이 떨어질 자리를 고른다. 지금 장수나 꼬리가 서 있는 곳은 피한다(꼬리는 길을 따라 그 자리를 계속 지나가므로
-## 거기에 떨어지면 피할 수 없다). target에서 시작해 장수 둘레로 조금씩 돌려 가며 빈 자리를 찾고, 없으면 Vector2.INF.
-func _clear_spot(target: Vector2, radius: float, head: Vector2, nodes: PackedVector2Array, arena_center: Vector2) -> Vector2:
+## 공격이 떨어질 자리를 고른다. 떨어질 때(time 뒤)까지 꼬리가 지나가고 있을 자리는 피한다. 꼬리는 길을 따라
+## 같은 자리를 차례로 지나가므로 거기에 떨어지면 피할 수 없다. 꼬리 끝에 가까운 마디만 있는 자리는 그 전에 비므로 괜찮다.
+## target에서 시작해 거리와 방향을 조금씩 바꿔 가며 찾고, 없으면 Vector2.INF(그 공격은 하지 않는다).
+func _clear_spot(target: Vector2, radius: float, time: float, speed: float, head: Vector2, nodes: PackedVector2Array, shown: int, arena_center: Vector2) -> Vector2:
 	var offset := target - head
 	var margin := radius + float(_data["attack_clear_margin"])
 	var step := deg_to_rad(float(_data["attack_search_step_deg"]))
-	for i in int(_data["attack_search_tries"]):
-		# 0, +1, -1, +2, -2 ... 순서로 돌린다
-		var turn := step * ceili(i / 2.0) * (1.0 if i % 2 == 1 else -1.0)
-		var spot := clamp_to_arena(head + offset.rotated(turn), arena_center, radius)
-		if not is_hit(spot, margin, head, nodes):
-			return spot
+	var gap := spacing(shown)
+	# 이 길이보다 뒤에 꼬리가 남아 있는 마디는 떨어질 때까지 그 자리를 다 지나가지 못한다
+	var passing := speed * time * float(_data["attack_pass_ratio"])
+	var tail_length := nodes.size() * gap
+	for scale: float in _data["attack_search_scales"]:
+		for i in int(_data["attack_search_tries"]):
+			# 0, +1, -1, +2, -2 ... 순서로 돌린다
+			var turn := step * ceili(i / 2.0) * (1.0 if i % 2 == 1 else -1.0)
+			var spot := clamp_to_arena(head + (offset * scale).rotated(turn), arena_center, radius)
+			var blocked := false
+			for k in nodes.size():
+				if nodes[k].distance_to(spot) <= margin and tail_length - (k + 1) * gap > passing:
+					blocked = true
+					break
+			if not blocked:
+				return spot
 	return Vector2.INF
 
 
@@ -336,3 +347,11 @@ func clamp_to_arena(point: Vector2, center: Vector2, margin := 0.0) -> Vector2:
 func is_outside_arena(point: Vector2, center: Vector2) -> bool:
 	var scaled := Vector2((point.x - center.x) / float(_data["rx"]), (point.y - center.y) / float(_data["rz"]))
 	return scaled.length() > 1.0
+
+
+## 타원 벽 위의 점에서 벽을 따라가는 방향. 두 접선 방향 중 지금 가던 쪽(heading)에 가까운 것을 돌려준다.
+func wall_tangent(point: Vector2, center: Vector2, heading: Vector2) -> Vector2:
+	# 타원 x²/rx² + z²/rz² = 1의 법선은 (x/rx², z/rz²)이다
+	var normal := Vector2((point.x - center.x) / pow(float(_data["rx"]), 2.0), (point.y - center.y) / pow(float(_data["rz"]), 2.0)).normalized()
+	var tangent := normal.orthogonal()
+	return tangent if tangent.dot(heading) >= 0.0 else -tangent

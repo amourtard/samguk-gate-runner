@@ -326,18 +326,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not _dragging_joy:
 				_dragging_joy = true
 				_joy_origin = sd.position - sd.relative
-			_joy_current = sd.position
-			var delta := _joy_current - _joy_origin
-			if delta.length() > float(_visual["encircle_view"]["joystick_dead_zone"]):
-				_steer_dir = delta.normalized()
-			_hud.update_joystick(true, _joy_origin, _joy_current)
+			_steer_with_joystick(sd.position)
 		elif event is InputEventMouseMotion and _dragging_joy:
 			var mm := event as InputEventMouseMotion
-			_joy_current = mm.position
-			var delta := _joy_current - _joy_origin
-			if delta.length() > float(_visual["encircle_view"]["joystick_dead_zone"]):
-				_steer_dir = delta.normalized()
-			_hud.update_joystick(true, _joy_origin, _joy_current)
+			_steer_with_joystick(mm.position)
 		elif event is InputEventKey and event.pressed and not event.echo:
 			var step := int(_tuning["debug"]["count_step"])
 			if event.keycode == DEBUG_ADD_KEY:
@@ -1182,6 +1174,12 @@ func _start_encircle_boss_phase() -> void:
 	_hero_pos2d = Vector2(clampf(_army_position.x, -side_limit, side_limit), _arena_center.y + float(data["rz"]) * float(data["start_ratio"]))
 	_hero_heading = -PI / 2.0
 	_steer_dir = Vector2.UP
+	# 달리기에서 화면을 누른 채 들어왔으면 그 자리를 조이스틱의 원점으로 이어받는다
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_dragging_joy = true
+		_joy_origin = get_viewport().get_mouse_position()
+		_joy_current = _joy_origin
+		_hud.update_joystick(true, _joy_origin, _joy_current)
 
 	# 처음에는 꼬리가 장수 뒤로 곧게 늘어서 있다
 	_trail_points.clear()
@@ -1267,9 +1265,9 @@ func _process_encircle_boss(delta: float) -> void:
 	_hero_pos2d += Vector2.from_angle(_hero_heading) * float(data["move_speed"]) * delta
 	if _encircle.is_outside_arena(_hero_pos2d, _arena_center):
 		_hero_pos2d = _encircle.clamp_to_arena(_hero_pos2d, _arena_center)
-		# 벽에 닿으면 안쪽으로 방향을 돌린다
-		_hero_heading = lerp_angle(_hero_heading, (_arena_center - _hero_pos2d).angle(), float(data["wall_turn"]))
-		_steer_dir = Vector2.from_angle(_hero_heading)
+		# 벽에 닿으면 벽을 따라 미끄러진다. 누른 방향은 그대로 두고, 몸만 벽의 접선 쪽으로 조금 돌린다
+		var tangent: Vector2 = _encircle.wall_tangent(_hero_pos2d, _arena_center, Vector2.from_angle(_hero_heading))
+		_hero_heading = lerp_angle(_hero_heading, tangent.angle(), float(data["wall_turn"]))
 	var boss_pos := Vector2(_boss_group.position.x, _boss_group.position.z)
 	var from_boss := _hero_pos2d - boss_pos
 	if from_boss.length() < float(data["boss_body"]) and from_boss != Vector2.ZERO:
@@ -1345,17 +1343,41 @@ func _update_encircle_ribbon_and_hint() -> void:
 
 	# 다가가면 고리가 닫힐 마디를 조금 멀리서부터 보여준다
 	var reach := float(_tuning["encircle"]["loop_close_distance"]) * float(view["hint_reach_mult"])
-	var index: int = _encircle.closing_node(_hero_pos2d, _trail_nodes, mini(army.count, _display_limit), reach)
-	_loop_hint_ring.visible = index >= 0
-	if index >= 0:
-		var at := _trail_nodes[index]
+	var found: Dictionary = _encircle.closing_point(_hero_pos2d, _trail_points, shown, reach, _encircle_targets())
+	_loop_hint_ring.visible = not found.is_empty()
+	if not found.is_empty():
+		var at: Vector2 = found["pos"]
 		_loop_hint_ring.position = Vector3(at.x, float(view["hint_lift"]), at.y)
 		var pulse := 1.0 + sin(_elapsed * float(view["hint_pulse_speed"])) * float(view["hint_pulse"])
 		_loop_hint_ring.scale = Vector3(pulse, float(view["hint_flatten"]), pulse)
 
 
+## 조이스틱을 current까지 끌었다: 원점에서 끈 방향으로 달린다. 손가락이 손잡이가 움직이는 범위보다 멀어지면
+## 원점이 손가락을 따라온다(반대쪽으로 조금만 되돌려도 바로 방향이 바뀐다).
+func _steer_with_joystick(current: Vector2) -> void:
+	var view: Dictionary = _visual["encircle_view"]
+	_joy_current = current
+	var offset := _joy_current - _joy_origin
+	var travel := float(view["joystick_travel"])
+	if offset.length() > travel:
+		_joy_origin = _joy_current - offset.limit_length(travel)
+		offset = _joy_current - _joy_origin
+	if offset.length() > float(view["joystick_dead_zone"]):
+		_steer_dir = offset.normalized()
+	_hud.update_joystick(true, _joy_origin, _joy_current)
+
+
+## 감쌀 대상의 위치: 보스와 살아 있는 호위병
+func _encircle_targets() -> Array[Vector2]:
+	var targets: Array[Vector2] = [Vector2(_boss_group.position.x, _boss_group.position.z)]
+	for escort in _escort_groups:
+		if is_instance_valid(escort):
+			targets.append(Vector2(escort.position.x, escort.position.z))
+	return targets
+
+
 func _check_encircle_loop() -> void:
-	var loop: PackedVector2Array = _encircle.closed_loop(_hero_pos2d, _trail_nodes, _trail_points, mini(army.count, _display_limit))
+	var loop: PackedVector2Array = _encircle.closed_loop(_hero_pos2d, _trail_points, mini(army.count, _display_limit), _encircle_targets())
 	if loop.is_empty():
 		return
 	var data: Dictionary = _tuning["encircle"]
@@ -1600,7 +1622,7 @@ func _run_encircle_boss(delta: float) -> void:
 		return
 
 	# 새 공격의 예고: 떨어질 자리에 원을 깔고, 불덩이는 그 자리로 날린다
-	var attacks: Array[Dictionary] = _encircle.start_attacks(delta, _hero_pos2d, _hero_heading, float(data["move_speed"]), _trail_nodes, _arena_center, _rng)
+	var attacks: Array[Dictionary] = _encircle.start_attacks(delta, _hero_pos2d, _hero_heading, float(data["move_speed"]), _trail_nodes, mini(army.count, _display_limit), _arena_center, _rng)
 	for attack in attacks:
 		var at: Vector2 = attack["pos"]
 		var marker := _boss_view.show_target(Vector3(at.x, 0.0, at.y), float(attack["radius"]), float(attack["time"]))

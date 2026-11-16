@@ -40,6 +40,8 @@ var _trail_head := Vector2.ZERO
 var _trail_nodes := PackedVector2Array()
 var _trail_columns := 1
 var _trail_column_spacing := 0.0
+# 지난번에 꼬리로 쓴 병사 수(같으면 위치만 갱신한다)
+var _trail_written := -1
 
 
 func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary, color: Color, facing: float, bob_height: float, fixed_front_radius := -1.0) -> void:
@@ -275,6 +277,7 @@ func _rebuild_trail() -> void:
 		multimesh.instance_count = _display_limit * 2
 		_dying.clear()
 		_alive_transforms.clear()
+		_trail_written = -1
 
 	var shown := mini(_army.count, _display_limit)
 	# 줄어든 만큼은 그 자리에서 튕겨 날아간다(이 노드가 원점에 있으므로 장수를 따라 움직이지 않는다)
@@ -284,6 +287,8 @@ func _rebuild_trail() -> void:
 		_dying.pop_front()
 
 	_center_z = 0.0
+	var count_changed := shown != _alive_transforms.size() or shown != _trail_written
+	_trail_written = shown
 	_alive_transforms.resize(shown)
 	var scale_factor := model_scale(_unit_type, _visual)
 	for i in shown:
@@ -298,9 +303,13 @@ func _rebuild_trail() -> void:
 		var basis := Basis(Vector3.UP, -forward.angle() - PI / 2.0).scaled(Vector3.ONE * scale_factor)
 		_alive_transforms[i] = Transform3D(basis, Vector3(spot.x, 0.0, spot.y))
 		multimesh.set_instance_transform(i, _alive_transforms[i])
-		multimesh.set_instance_custom_data(i, Color(fposmod(i * PHASE_STEP, 1.0), 0.0, 0.0, 0.0))
-		multimesh.set_instance_color(i, Color.WHITE)
-	_write_dying()
+		# 흔들림 박자와 색은 병력 수가 바뀌었을 때만 다시 쓴다(매 프레임 쓰면 프레임 수가 절반으로 떨어진다)
+		if count_changed:
+			multimesh.set_instance_custom_data(i, Color(fposmod(i * PHASE_STEP, 1.0), 0.0, 0.0, 0.0))
+			multimesh.set_instance_color(i, Color.WHITE)
+	# 사라지는 병사는 _process가 매 프레임 쓴다. 병력 수가 바뀌었거나 사라지는 병사가 없을 때만 여기서 쓴다
+	if count_changed or _dying.is_empty():
+		_write_dying()
 
 
 ## 사라지는 병사 한 명의 기록. 튕겨 날아가는 설정이 있으면 속도와 회전을 정한다.
