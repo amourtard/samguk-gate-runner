@@ -14,3 +14,6 @@ Thumbs.db
 
 # 서버 코드의 설치 폴더
 node_modules/
+
+# 별도 시제품 폴더(이 프로젝트의 내용이 아님)
+/samguk-encircle/

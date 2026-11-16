@@ -51,6 +51,11 @@ var _kill_fx: Dictionary
 # 첫 판의 조작 안내
 var _drag_hint: Label
 var _drag_hint_data: Dictionary
+# 보스전 2페이즈(십면매복) 표시기: 포위 횟수 라벨과 가상 조이스틱
+var _encircle_label: Label
+var _joy_base: Panel
+var _joy_knob: Panel
+var _encircle_view: Dictionary
 
 
 func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary, hero_name: String) -> void:
@@ -83,6 +88,7 @@ func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary
 	_kill_fx = visual["kill_fx"]
 	_drag_hint_data = visual["drag_hint"]
 	_build_kill_label()
+	_build_encircle_ui()
 
 	_army.changed.connect(_on_army_changed)
 	_on_army_changed()
@@ -264,6 +270,10 @@ func set_overlay_hidden(hidden: bool) -> void:
 	if hidden:
 		_boss_name.visible = false
 		_banner.visible = false
+		if _joy_base != null:
+			_joy_base.visible = false
+		if _encircle_label != null:
+			_encircle_label.visible = false
 
 
 ## 첫 판에만 띄우는 조작 안내. 좌우로 흔들리며 끌어서 움직인다는 것을 알린다.
@@ -321,6 +331,60 @@ func _build_kill_label() -> void:
 	_kill_label.position.y = float(_hud["kill_top"])
 	_kill_label.visible = false
 	_top.add_child(_kill_label)
+
+
+## 보스 포위전의 표시: 포위 횟수 글자와 가상 조이스틱. 값은 visual.json의 encircle_view.
+func _build_encircle_ui() -> void:
+	_encircle_view = DataDb.table("visual")["encircle_view"]
+	_encircle_label = Label.new()
+	_encircle_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_encircle_label.add_theme_font_size_override("font_size", int(_hud["kill_font_size"]))
+	_encircle_label.add_theme_constant_override("outline_size", int(_hud["kill_outline"]))
+	_encircle_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_encircle_label.add_theme_color_override("font_color", Color.html(_encircle_view["count_color"]))
+	# 격파 수 글자 바로 아래에 둔다
+	_encircle_label.position = Vector2(float(_hud["kill_right"]), float(_hud["kill_top"]) + float(_encircle_view["count_offset_y"]))
+	_encircle_label.visible = false
+	_top.add_child(_encircle_label)
+
+	var base_size := float(_encircle_view["joystick_size"])
+	_joy_base = Panel.new()
+	_joy_base.visible = false
+	_joy_base.size = Vector2(base_size, base_size)
+	_joy_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var base_style := StyleBoxFlat.new()
+	base_style.bg_color = Color.html(_encircle_view["joystick_base_color"])
+	base_style.border_color = Color.html(_encircle_view["joystick_border_color"])
+	base_style.set_border_width_all(int(_encircle_view["joystick_border"]))
+	base_style.set_corner_radius_all(int(base_size / 2.0))
+	_joy_base.add_theme_stylebox_override("panel", base_style)
+	add_child(_joy_base)
+
+	var knob_size := float(_encircle_view["joystick_knob_size"])
+	_joy_knob = Panel.new()
+	_joy_knob.size = Vector2(knob_size, knob_size)
+	_joy_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var knob_style := StyleBoxFlat.new()
+	knob_style.bg_color = Color.html(_encircle_view["joystick_knob_color"])
+	knob_style.set_corner_radius_all(int(knob_size / 2.0))
+	_joy_knob.add_theme_stylebox_override("panel", knob_style)
+	_joy_base.add_child(_joy_knob)
+
+
+func set_encircle_count(count: int) -> void:
+	_encircle_label.text = str(_encircle_view["count_text"]) % count
+	_encircle_label.visible = count > 0 and not _overlay_hidden
+
+
+## 가상 조이스틱을 누른 자리(origin)에 띄우고 손잡이를 끈 방향(current)으로 옮긴다.
+func update_joystick(active: bool, origin: Vector2, current: Vector2) -> void:
+	_joy_base.visible = active and not _overlay_hidden
+	if not active:
+		return
+	var half := Vector2.ONE * float(_encircle_view["joystick_size"]) / 2.0
+	_joy_base.position = origin - half
+	var offset := (current - origin).limit_length(float(_encircle_view["joystick_travel"]))
+	_joy_knob.position = half + offset - Vector2.ONE * float(_encircle_view["joystick_knob_size"]) / 2.0
 
 
 ## 화면 위쪽 안내 띠(지형 이름 등)를 잠깐 보여주고 사라지게 한다.

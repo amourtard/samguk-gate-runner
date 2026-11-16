@@ -126,6 +126,32 @@ var _clash_view: ClashView
 var _fx: Node3D
 var _focus_lit := false
 
+# --- 보스 포위전(십면매복). 계산은 encircle.gd, 여기서는 입력과 표시만 한다 ---
+const EncircleScript := preload("res://scripts/encircle.gd")
+var _encircle: RefCounted
+var _encircle_active := false
+var _arena_center := Vector2.ZERO
+var _hero_pos2d := Vector2.ZERO
+var _hero_heading := -PI / 2.0
+var _steer_dir := Vector2.UP
+# 장수가 지나온 길(최근 것이 앞)과 그 위의 꼬리 마디
+var _trail_points := PackedVector2Array()
+var _trail_nodes := PackedVector2Array()
+# 예고 중인 보스 공격: {"kind", "pos", "radius", "time", "marker"}
+var _encircle_hazards: Array[Dictionary] = []
+# 호위병 무리와 무리마다 다음에 물 때까지 남은 시간
+var _escort_groups: Array[EnemyGroup] = []
+var _escort_bite_left := {}
+var _trail_ribbon_mesh: ImmediateMesh
+var _loop_hint_ring: MeshInstance3D
+var _encircle_fx_root: Node3D
+var _dragging_joy := false
+var _joy_origin := Vector2.ZERO
+var _joy_current := Vector2.ZERO
+var _encircle_tick_accum := 0.0
+# 지난 교전 계산에서 근접으로 싸운 인원(장수 기술 조건에 쓴다)
+var _encircle_melee := 0
+
 
 func _ready() -> void:
 	_tuning = DataDb.table("tuning")
@@ -281,6 +307,50 @@ func _add_bridge(start: float, end: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _finished or _choosing:
 		return
+	if _encircle_active:
+		if event is InputEventMouseButton:
+			var mb := event as InputEventMouseButton
+			if mb.button_index == MOUSE_BUTTON_LEFT:
+				_dragging_joy = mb.pressed
+				_joy_origin = mb.position
+				_joy_current = mb.position
+				_hud.update_joystick(_dragging_joy, _joy_origin, _joy_current)
+		elif event is InputEventScreenTouch:
+			var st := event as InputEventScreenTouch
+			_dragging_joy = st.pressed
+			_joy_origin = st.position
+			_joy_current = st.position
+			_hud.update_joystick(_dragging_joy, _joy_origin, _joy_current)
+		elif event is InputEventScreenDrag:
+			var sd := event as InputEventScreenDrag
+			if not _dragging_joy:
+				_dragging_joy = true
+				_joy_origin = sd.position - sd.relative
+			_joy_current = sd.position
+			var delta := _joy_current - _joy_origin
+			if delta.length() > float(_visual["encircle_view"]["joystick_dead_zone"]):
+				_steer_dir = delta.normalized()
+			_hud.update_joystick(true, _joy_origin, _joy_current)
+		elif event is InputEventMouseMotion and _dragging_joy:
+			var mm := event as InputEventMouseMotion
+			_joy_current = mm.position
+			var delta := _joy_current - _joy_origin
+			if delta.length() > float(_visual["encircle_view"]["joystick_dead_zone"]):
+				_steer_dir = delta.normalized()
+			_hud.update_joystick(true, _joy_origin, _joy_current)
+		elif event is InputEventKey and event.pressed and not event.echo:
+			var step := int(_tuning["debug"]["count_step"])
+			if event.keycode == DEBUG_ADD_KEY:
+				army.set_count(army.count + step)
+			elif event.keycode == DEBUG_SUB_KEY:
+				army.set_count(army.count - step)
+			elif DEBUG_UNIT_KEYS.has(event.keycode):
+				var unit_type: String = DEBUG_UNIT_KEYS[event.keycode]
+				army.set_unit_type(unit_type, float(_units[unit_type]["health"]))
+			elif event.keycode == DEBUG_OVERLAY_KEY:
+				_hud.toggle_debug()
+			_update_hud()
+		return
 	if event is InputEventScreenDrag:
 		# 한 번 끌어 보면 조작 안내를 지우고 다시 띄우지 않는다
 		if not GameState.seen_drag_hint:
@@ -317,6 +387,10 @@ func _process(delta: float) -> void:
 		_freeze_left -= delta
 		return
 	_elapsed += delta
+
+	if _encircle_active:
+		_process_encircle_boss(delta)
+		return
 
 	_rush_front_enemy(delta)
 	_run_combat(delta)
@@ -682,8 +756,10 @@ func _enter_next_section() -> void:
 		Sound.play_music("boss", Sound.music_volume())
 		# 보스 구간에서는 죽은 아군 병사도 튕겨 날아간다
 		_army_view.set_death_fly(_visual["soldier"]["death_fly"])
-		_boss_stats = {"start": _elapsed, "count": army.count, "unit": army.unit_type, "zones": 0, "zone_hits": 0, "fireballs": 0, "fireball_hits": 0, "enraged": false}
+		_boss_stats = {"start": _elapsed, "count": army.count, "unit": army.unit_type, "zones": 0, "zone_hits": 0, "fireballs": 0, "fireball_hits": 0, "enraged": false, "encircles": 0}
 		Telemetry.track("boss_start", {"count": army.count, "unit": army.unit_type, "time": snappedf(_elapsed, 0.1)})
+		if bool(_tuning["encircle"]["enabled"]):
+			_start_encircle_boss_phase()
 	_start_section()
 
 
@@ -800,6 +876,7 @@ func _finish(cleared: bool) -> void:
 			"fireballs": _boss_stats["fireballs"],
 			"fireball_hits": _boss_stats["fireball_hits"],
 			"enraged": _boss_stats["enraged"],
+			"encircles": _encircle_count(),
 		})
 	Telemetry.end_run({
 		"cleared": cleared,
@@ -845,9 +922,9 @@ func _announce_section() -> void:
 ## 결과 화면의 "도달": 돌파면 보스 격파, 아니면 끝난 구간
 func _reached_text(cleared: bool) -> String:
 	if cleared:
-		return "보스 격파"
+		return "보스 격파 (포위 %d회)" % _encircle_count() if _encircle_count() > 0 else "보스 격파"
 	if _section > _section_count:
-		return "보스전"
+		return "보스전 (포위 %d회)" % _encircle_count() if _encircle_count() > 0 else "보스전"
 	return "구간 %d/%d" % [_section, _section_count]
 
 
@@ -975,21 +1052,29 @@ func _in_boss_section() -> bool:
 
 ## 아군 표시 대형의 중심. 앞줄을 계산 위치에 맞추느라 계산 중심보다 조금 뒤에 있다.
 func _display_center() -> Vector3:
+	if _encircle_active:
+		return _army_position
 	return _army_position + Vector3(0.0, 0.0, maxf(_display_extent().y - _army_radius(), 0.0))
 
 
 func _update_camera() -> void:
 	# 평소에는 좌우를 따라가지 않고 전진 방향만 따라가 도로가 화면 중앙에 머물게 한다.
-	# 보스 구간은 광장이 넓어서 조금 물러나고 아군의 좌우 이동을 일부 따라간다.
-	# 아군 무리가 화면 높이의 정해진 위치(아래에서 3분의 1 근처)에 오도록 내려다보는 각을 더한다
+	# 보스전 2페이즈(십면매복)에서는 원형 결투장 전체와 꼬리 행렬이 한눈에 보이도록 위로 넓게 물러난다.
 	var data: Dictionary = _visual["camera"]
-	var pitch := deg_to_rad(float(data["pitch_deg"]))
+	var encircle_view: Dictionary = _visual["encircle_view"]
+	var pitch := deg_to_rad(float(data["pitch_deg"]) + (float(encircle_view["camera_pitch_add"]) if _encircle_active else 0.0))
 	var view_size := get_viewport().get_visible_rect().size
 	var half_vfov := atan(tan(deg_to_rad(_camera.fov) / 2.0) * view_size.y / view_size.x)
 	var depression := pitch + atan((float(data["army_screen_y"]) - 0.5) * 2.0 * tan(half_vfov))
 	var target_distance := float(data["distance_base"]) + float(data["distance_per_radius"]) * _display_extent().y
 	var target_x := 0.0
-	if _in_boss_section():
+	var target_z := _display_center().z
+	if _encircle_active:
+		# 결투장 전체와 꼬리가 한눈에 보이게 물러나고, 장수의 움직임은 조금만 따라간다
+		target_distance = float(encircle_view["camera_distance"])
+		target_x = _army_position.x * float(encircle_view["camera_follow"])
+		target_z = lerpf(_arena_center.y + float(encircle_view["camera_center_offset"]), _army_position.z, float(encircle_view["camera_follow"]))
+	elif _in_boss_section():
 		target_distance *= float(data["boss_distance_mult"])
 		target_x = _army_position.x * float(data["boss_follow_x"])
 	if _camera_distance < 0.0:
@@ -998,7 +1083,7 @@ func _update_camera() -> void:
 		var weight := 1.0 - exp(-float(data["follow_rate"]) * get_process_delta_time())
 		_camera_distance = lerpf(_camera_distance, target_distance, weight)
 		_camera_x = lerpf(_camera_x, target_x, weight)
-	var anchor := Vector3(_camera_x, 0.0, _display_center().z)
+	var anchor := Vector3(_camera_x, 0.0, target_z)
 	_camera.position = anchor + Vector3(0.0, sin(depression), cos(depression)) * _camera_distance
 	_camera.rotation = Vector3(-pitch, 0.0, 0.0)
 	# 근접 접촉과 보스 공격 순간 짧게 흔든다
@@ -1017,7 +1102,7 @@ func _update_hud() -> void:
 	if not _enemy_groups.is_empty():
 		pools = _enemy_groups[0].pools
 	_hud.set_next_enemy(pools)
-	var stage_text := "%s   %s" % [_stage_id, "보스전" if _section > _section_count else "구간 %d/%d" % [mini(_section, _section_count), _section_count]]
+	var stage_text := "%s   %s" % [_stage_id, ("보스전 · 십면매복" if _encircle_active else "보스전") if _section > _section_count else "구간 %d/%d" % [mini(_section, _section_count), _section_count]]
 	if _section == _bridge_section:
 		stage_text += "   좁은 다리"
 	_hud.set_stage_text(stage_text)
@@ -1069,3 +1154,512 @@ func _popup_anchor() -> Vector2:
 func _count_anchor() -> Vector2:
 	var height := ModelBuilder.height_of(_army_view.multimesh.mesh) + float(_visual["hud"]["count_height"])
 	return _camera.unproject_position(_display_center() + Vector3.UP * height)
+
+
+# ==============================================================================
+# 보스 포위전: 십면매복. 규칙은 명세 4장, 계산은 scripts/encircle.gd.
+# 여기서는 입력을 장수의 방향으로 바꾸고, 계산 결과를 화면과 소리로 옮긴다.
+# ==============================================================================
+
+func _encircle_count() -> int:
+	return int(_encircle.get("encircle_count")) if _encircle != null else 0
+
+
+func _start_encircle_boss_phase() -> void:
+	if _encircle_active or _boss_group == null:
+		return
+	_encircle_active = true
+	_combat = null
+	_boss_view.hide_warning()
+	_encircle = EncircleScript.new(_tuning, _units, _strategy)
+
+	var data: Dictionary = _tuning["encircle"]
+	var view: Dictionary = _visual["encircle_view"]
+	# 결투장은 보스가 서 있던 곳 둘레의 타원이다. 보스는 중심보다 조금 뒤, 장수는 앞쪽 가장자리 안에서 시작한다
+	_arena_center = Vector2(0.0, _boss_group.position.z + float(data["arena_ahead"]))
+	_boss_group.position = Vector3(_arena_center.x, 0.0, _arena_center.y + float(data["boss_offset"]))
+	var side_limit := float(data["rx"]) * float(data["start_side_ratio"])
+	_hero_pos2d = Vector2(clampf(_army_position.x, -side_limit, side_limit), _arena_center.y + float(data["rz"]) * float(data["start_ratio"]))
+	_hero_heading = -PI / 2.0
+	_steer_dir = Vector2.UP
+
+	# 처음에는 꼬리가 장수 뒤로 곧게 늘어서 있다
+	_trail_points.clear()
+	var step := float(data["trail_step"])
+	for i in ceili(_encircle.trail_keep_length() / step):
+		_trail_points.append(_hero_pos2d + Vector2(0.0, (i + 1) * step))
+	_army_position = Vector3(_hero_pos2d.x, 0.0, _hero_pos2d.y)
+	# 꼬리는 월드 좌표로 그리므로 병사 표시 노드를 원점에 둔다(죽은 병사가 장수를 따라 움직이지 않는다)
+	_army_view.position = Vector3.ZERO
+	_army_view.set_trail_mode(true)
+	_refresh_trail()
+	_hero_view.follow_360(_army_position, _hero_heading)
+
+	_encircle_fx_root = Node3D.new()
+	add_child(_encircle_fx_root)
+
+	# 결투장 경계 고리
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.outer_radius = 1.0
+	torus.inner_radius = 1.0 - float(view["arena_ring_width"])
+	torus.rings = int(view["arena_ring_segments"])
+	ring.mesh = torus
+	ring.position = Vector3(_arena_center.x, float(view["arena_ring_lift"]), _arena_center.y)
+	var ring_margin := float(view["arena_ring_margin"])
+	ring.scale = Vector3(float(data["rx"]) + ring_margin, float(view["arena_ring_flatten"]), float(data["rz"]) + ring_margin)
+	ring.material_override = _flat_unshaded(Color.html(view["arena_ring_color"]))
+	_encircle_fx_root.add_child(ring)
+
+	# 꼬리 아래에 깔리는 띠
+	var ribbon := MeshInstance3D.new()
+	_trail_ribbon_mesh = ImmediateMesh.new()
+	ribbon.mesh = _trail_ribbon_mesh
+	ribbon.material_override = _flat_unshaded(Color.html(view["ribbon_color"]))
+	_encircle_fx_root.add_child(ribbon)
+
+	# 여기로 가면 고리가 닫힌다는 표시
+	_loop_hint_ring = MeshInstance3D.new()
+	var hint := TorusMesh.new()
+	hint.inner_radius = float(view["hint_inner_radius"])
+	hint.outer_radius = float(view["hint_outer_radius"])
+	_loop_hint_ring.mesh = hint
+	_loop_hint_ring.material_override = _flat_unshaded(Color.html(view["hint_color"]))
+	_loop_hint_ring.visible = false
+	_encircle_fx_root.add_child(_loop_hint_ring)
+
+	_hud.show_banner(view["start_text"])
+
+
+## 빛을 받지 않는 반투명 단색 재질(바닥 표시용)
+func _flat_unshaded(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.disable_fog = true
+	material.albedo_color = color
+	return material
+
+
+func _process_encircle_boss(delta: float) -> void:
+	if _boss_group == null or not is_instance_valid(_boss_group):
+		return
+	var data: Dictionary = _tuning["encircle"]
+	_encircle.advance(delta)
+
+	# 1. 조향: 키보드 8방향(WASD, 방향키). 터치와 마우스는 _unhandled_input에서 _steer_dir를 바꾼다
+	var key_dir := Vector2.ZERO
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		key_dir.x -= 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		key_dir.x += 1.0
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		key_dir.y -= 1.0
+	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+		key_dir.y += 1.0
+	if key_dir != Vector2.ZERO:
+		_steer_dir = key_dir.normalized()
+
+	# 2. 장수는 멈추지 않고 달린다. 타원 밖으로 나가지 못하고 보스 몸을 뚫지 못한다
+	var before := _hero_pos2d
+	_hero_heading = rotate_toward(_hero_heading, _steer_dir.angle(), float(data["turn_rate"]) * delta)
+	_hero_pos2d += Vector2.from_angle(_hero_heading) * float(data["move_speed"]) * delta
+	if _encircle.is_outside_arena(_hero_pos2d, _arena_center):
+		_hero_pos2d = _encircle.clamp_to_arena(_hero_pos2d, _arena_center)
+		# 벽에 닿으면 안쪽으로 방향을 돌린다
+		_hero_heading = lerp_angle(_hero_heading, (_arena_center - _hero_pos2d).angle(), float(data["wall_turn"]))
+		_steer_dir = Vector2.from_angle(_hero_heading)
+	var boss_pos := Vector2(_boss_group.position.x, _boss_group.position.z)
+	var from_boss := _hero_pos2d - boss_pos
+	if from_boss.length() < float(data["boss_body"]) and from_boss != Vector2.ZERO:
+		_hero_pos2d = boss_pos + from_boss.normalized() * float(data["boss_body"])
+	_encircle.add_travel(before.distance_to(_hero_pos2d))
+
+	# 3. 지나온 길을 기억하고 꼬리를 그 위에 세운다
+	if _trail_points.is_empty() or _hero_pos2d.distance_to(_trail_points[0]) >= float(data["trail_step"]):
+		_trail_points.insert(0, _hero_pos2d)
+		var keep := ceili(_encircle.trail_keep_length() / float(data["trail_step"]))
+		if _trail_points.size() > keep:
+			_trail_points.resize(keep)
+	_army_position = Vector3(_hero_pos2d.x, 0.0, _hero_pos2d.y)
+	_refresh_trail()
+	_hero_view.follow_360(_army_position, _hero_heading)
+	_update_encircle_ribbon_and_hint()
+
+	# 4. 고리가 닫혔는가
+	_check_encircle_loop()
+	if _finished:
+		return
+
+	# 5. 장수 기술과 꼬리 교전
+	_run_encircle_hero_skill(delta)
+	if _finished:
+		return
+	_run_encircle_combat(delta)
+	if _finished:
+		return
+
+	# 6. 보스의 움직임과 공격, 호위병
+	_run_encircle_boss(delta)
+	if _finished:
+		return
+
+	_update_skill_view()
+	var dust := float(_visual["encircle_view"]["dust_half_size"])
+	_fx.set_dust(_army_position, dust, dust, true)
+	_road_view.follow(_army_position.z)
+	_field_view.follow(_army_position.z)
+	_update_camera()
+	_update_hud()
+
+
+## 꼬리 마디를 다시 계산해 병사를 그 위에 세운다.
+func _refresh_trail() -> void:
+	var shown := mini(army.count, _display_limit)
+	_trail_nodes = _encircle.tail_nodes(_hero_pos2d, _trail_points, shown)
+	_army_view.update_trail(_hero_pos2d, _trail_nodes, _encircle.columns(shown), float(_tuning["encircle"]["column_spacing"]))
+
+
+func _update_encircle_ribbon_and_hint() -> void:
+	var view: Dictionary = _visual["encircle_view"]
+	var lift := float(view["ribbon_lift"])
+	_trail_ribbon_mesh.clear_surfaces()
+	# 띠는 병사가 선 자리만이 아니라 지나온 길을 따라 꼬리 끝까지 깐다(병사가 적어도 줄이 이어져 보인다)
+	var shown := mini(army.count, _display_limit)
+	var tail_length: float = _encircle.ranks(shown) * _encircle.spacing(shown)
+	if _trail_points.size() >= 2:
+		_trail_ribbon_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+		var previous := _hero_pos2d
+		var walked := 0.0
+		for point in _trail_points:
+			walked += previous.distance_to(point)
+			if walked > tail_length:
+				break
+			var forward := (previous - point).normalized() if previous.distance_squared_to(point) > 0.0001 else Vector2.UP
+			var side := forward.orthogonal() * float(view["ribbon_half_width"])
+			_trail_ribbon_mesh.surface_add_vertex(Vector3(point.x + side.x, lift, point.y + side.y))
+			_trail_ribbon_mesh.surface_add_vertex(Vector3(point.x - side.x, lift, point.y - side.y))
+			previous = point
+		_trail_ribbon_mesh.surface_end()
+
+	# 다가가면 고리가 닫힐 마디를 조금 멀리서부터 보여준다
+	var reach := float(_tuning["encircle"]["loop_close_distance"]) * float(view["hint_reach_mult"])
+	var index: int = _encircle.closing_node(_hero_pos2d, _trail_nodes, mini(army.count, _display_limit), reach)
+	_loop_hint_ring.visible = index >= 0
+	if index >= 0:
+		var at := _trail_nodes[index]
+		_loop_hint_ring.position = Vector3(at.x, float(view["hint_lift"]), at.y)
+		var pulse := 1.0 + sin(_elapsed * float(view["hint_pulse_speed"])) * float(view["hint_pulse"])
+		_loop_hint_ring.scale = Vector3(pulse, float(view["hint_flatten"]), pulse)
+
+
+func _check_encircle_loop() -> void:
+	var loop: PackedVector2Array = _encircle.closed_loop(_hero_pos2d, _trail_nodes, _trail_points, mini(army.count, _display_limit))
+	if loop.is_empty():
+		return
+	var data: Dictionary = _tuning["encircle"]
+	var view: Dictionary = _visual["encircle_view"]
+	# 고리 안에 보스의 중심이나 호위병이 있어야 포위다
+	var boss_inside: bool = EncircleScript.encloses(loop, Vector2(_boss_group.position.x, _boss_group.position.z))
+	var enclosed_escorts: Array[EnemyGroup] = []
+	for escort in _escort_groups:
+		if is_instance_valid(escort) and EncircleScript.encloses(loop, Vector2(escort.position.x, escort.position.z)):
+			enclosed_escorts.append(escort)
+	if not boss_inside and enclosed_escorts.is_empty():
+		return
+
+	var boss_pool: Army = _boss_group.pools[0]
+	var damage := 0.0
+	if boss_inside:
+		damage = _encircle.loop_damage(army, boss_pool)
+	_encircle.register_loop(boss_inside)
+	_boss_stats["encircles"] = _encircle_count()
+	_hud.set_encircle_count(_encircle_count())
+	var gold := int(data["bonus_gold"])
+	_bonus_gold += gold
+
+	var center := Vector2.ZERO
+	for point in loop:
+		center += point
+	center /= loop.size()
+	_spawn_encircle_polygon_fx(loop, center)
+	Sound.play("boss_lightning")
+	_sfx.play("wipe")
+	_freeze_left = float(_kill_fx["wipe_freeze"])
+	_shake_time = float(_kill_fx["wipe_shake_time"])
+	_shake_mult = float(_kill_fx["wipe_shake_mult"])
+
+	# 감싼 호위병은 전멸하고 일부가 투항해 아군이 된다
+	var recruits := 0
+	for escort in enclosed_escorts:
+		_kills += escort.total_count()
+		recruits += int(data["escort_recruit"])
+		_escort_groups.erase(escort)
+		_escort_bite_left.erase(escort.get_instance_id())
+		_fx.burst("wipe", escort.global_position + Vector3.UP, Color(0, 0, 0, 0), float(view["escort_burst_width"]))
+		escort.queue_free()
+	if recruits > 0:
+		_hud.set_kills(_kills)
+		army.set_count(army.count + recruits)
+
+	var popup_color := Color.html(view["popup_color"])
+	if boss_inside:
+		boss_pool.take_damage(damage)
+		_boss_group.flash(float(_kill_fx["flash"]), float(_kill_fx["flash_time"]))
+		_hud.show_damage(roundi(damage * _display_damage_mult), _damage_anchor(_damage_base(_boss_group)))
+		_fx.burst("boss_zone", _boss_group.global_position + Vector3.UP, Color(0, 0, 0, 0), float(view["boss_burst_width"]))
+		# 첫 포위에 실리는 책략을 띄운다
+		if _encircle_count() == 1:
+			var anchor := _popup_anchor() - Vector2(0.0, float(_visual["hud"]["delta_font_size"]))
+			for id: String in ["fire_attack", "vanguard", "chain"]:
+				if _strategy.has(id):
+					_show_strategy_trigger(id, anchor)
+					anchor -= Vector2(0.0, float(_visual["hud"]["delta_font_size"]))
+		if not boss_pool.is_alive():
+			_hud.show_delta(view["finish_text"], _popup_anchor(), popup_color)
+			_end_encircle_boss()
+			return
+
+	var text := str(view["loop_text"]) % gold
+	if recruits > 0:
+		text += "\n" + str(view["recruit_text"]) % recruits
+	_hud.show_delta(text, _popup_anchor(), popup_color)
+
+
+## 보스가 쓰러졌다: 남은 예고 표시를 지우고 판을 끝낸다.
+func _end_encircle_boss() -> void:
+	for hazard in _encircle_hazards:
+		var marker: Node3D = hazard["marker"]
+		if is_instance_valid(marker):
+			marker.queue_free()
+	_encircle_hazards.clear()
+	_on_enemy_group_defeated()
+
+
+func _spawn_encircle_polygon_fx(loop: PackedVector2Array, center: Vector2) -> void:
+	var view: Dictionary = _visual["encircle_view"]
+	var lift := float(view["loop_fill_lift"])
+	var mesh := ImmediateMesh.new()
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in loop.size():
+		var a := loop[i]
+		var b := loop[(i + 1) % loop.size()]
+		mesh.surface_add_vertex(Vector3(center.x, lift, center.y))
+		mesh.surface_add_vertex(Vector3(a.x, lift, a.y))
+		mesh.surface_add_vertex(Vector3(b.x, lift, b.y))
+	mesh.surface_end()
+	var fill := MeshInstance3D.new()
+	fill.mesh = mesh
+	var material := _flat_unshaded(Color.html(view["loop_fill_color"]))
+	fill.material_override = material
+	_encircle_fx_root.add_child(fill)
+	var tween := fill.create_tween()
+	tween.tween_property(material, "albedo_color:a", 0.0, float(view["loop_fill_time"]))
+	tween.tween_callback(fill.queue_free)
+
+	# 고리 가운데와 둘레 몇 곳에 번개를 내린다
+	_spawn_encircle_bolt(center)
+	var step := maxi(1, loop.size() / int(view["loop_bolts"]))
+	for i in range(0, loop.size(), step):
+		_spawn_encircle_bolt(loop[i])
+
+
+func _spawn_encircle_bolt(at: Vector2) -> void:
+	var view: Dictionary = _visual["boss_view"]
+	var height := float(view["bolt_height"])
+	var quad := QuadMesh.new()
+	quad.size = Vector2(height * float(view["bolt_texture_width_ratio"]), height)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.disable_fog = true
+	material.albedo_color = Color.html(view["bolt_color"])
+	var image := UiText.texture(str(view.get("bolt_texture", "")))
+	if image != null:
+		material.albedo_texture = image
+	var bolt := MeshInstance3D.new()
+	bolt.mesh = quad
+	bolt.material_override = material
+	bolt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bolt.position = Vector3(at.x, height / 2.0, at.y)
+	_encircle_fx_root.add_child(bolt)
+	var tween := bolt.create_tween()
+	tween.tween_property(bolt, "scale", Vector3(0.0, 1.0, 0.0), float(view["bolt_time"]))
+	tween.tween_callback(bolt.queue_free)
+
+
+func _run_encircle_hero_skill(delta: float) -> void:
+	var data: Dictionary = _tuning["encircle"]
+	var boss_pos := Vector2(_boss_group.position.x, _boss_group.position.z)
+	var gap := maxf(_hero_pos2d.distance_to(boss_pos) - float(data["boss_body"]), 0.0)
+	# 장비는 보스의 공격이 예고돼 있을 때, 근접 병종의 제갈량은 꼬리가 싸우는 중일 때 쓴다
+	var threatened := not _encircle_hazards.is_empty()
+	var in_contact := _encircle_melee > 0
+	var ranged := float(_units[army.unit_type]["range"]) > 0.0
+	var events := _hero.tick(delta, army, gap, 1, true, threatened, in_contact, ranged)
+	if not events["activated"]:
+		return
+	_hud.show_delta("%s 기술" % _hero.name, _popup_anchor(), Color.html(_tuning["colors"]["hero_skill"]))
+	Sound.play("skill_" + GameState.hero_id)
+	if _hero.skill_type() == "focus":
+		_skill_view.show_pulse(_army_position)
+	if float(events["strike_damage"]) > 0.0:
+		var boss_pool: Army = _boss_group.pools[0]
+		var dealt := minf(boss_pool.total_health, float(events["strike_damage"]))
+		boss_pool.take_damage(dealt)
+		_shake_time = float(_tuning["screen_shake_duration"])
+		_skill_view.show_strike(_army_position, _boss_group.global_position)
+		_show_strike_numbers(dealt, _boss_group)
+		if not boss_pool.is_alive():
+			_end_encircle_boss()
+
+
+func _run_encircle_combat(delta: float) -> void:
+	_damage_timer += delta
+	if _damage_timer >= float(_tuning["damage_number"]["interval"]):
+		_flush_damage_number()
+
+	_encircle_tick_accum += delta
+	while _encircle_tick_accum >= _tick_interval:
+		_encircle_tick_accum -= _tick_interval
+		var boss_pool: Army = _boss_group.pools[0]
+		var boss_pos := Vector2(_boss_group.position.x, _boss_group.position.z)
+		var distances := PackedFloat32Array()
+		for node in _trail_nodes:
+			distances.append(node.distance_to(boss_pos))
+		var result: Dictionary = _encircle.combat_tick(_tick_interval, army, distances)
+		_encircle_melee = int(result["melee"])
+		var view: Dictionary = _visual["encircle_view"]
+		if int(result["melee"]) > 0:
+			_sfx.play("hit")
+			_clash_view.spawn(_boss_group.global_position + Vector3(0.0, 0.0, float(view["clash_offset"])), float(view["clash_offset"]))
+		if (int(result["ranged"]) > 0 and _rng.randf() < float(view["arrow_chance"])) or result["volley"]:
+			var shooter := _trail_nodes[_rng.randi_range(0, _trail_nodes.size() - 1)]
+			_arrow_view.fire("ally", Vector3(shooter.x, 0.0, shooter.y), _boss_group.global_position)
+			_sfx.play("arrow")
+		if result["volley"]:
+			_show_strategy_trigger("fire_arrows", _popup_anchor())
+		var damage := float(result["damage"])
+		if damage > 0.0:
+			boss_pool.take_damage(damage)
+			_damage_accum += damage
+			if not boss_pool.is_alive():
+				_end_encircle_boss()
+				return
+
+
+func _run_encircle_boss(delta: float) -> void:
+	var boss_pool: Army = _boss_group.pools[0]
+	var boss_view: Dictionary = _visual["boss_view"]
+	var data: Dictionary = _tuning["encircle"]
+	var view: Dictionary = _visual["encircle_view"]
+
+	# 분노: 공격이 잦아지고 호위병이 나타난다
+	if _encircle.check_enrage(boss_pool.total_health / maxf(boss_pool.unit_health, 1.0)):
+		_boss_stats["enraged"] = true
+		_hud.show_banner(view["enrage_text"])
+		_boss_group.set_color(Color.html(boss_view["enrage_color"]))
+		Sound.set_music_pitch(float(boss_view["enrage_music_pitch"]))
+		Sound.play("boss_enrage")
+		_shake_time = float(_kill_fx["wipe_shake_time"])
+		_shake_mult = float(_kill_fx["wipe_shake_mult"])
+		_spawn_boss_escorts()
+
+	# 보스는 장수를 천천히 쫓는다. 포위당해 멈춘 동안에는 움직이지 않는다
+	if not _encircle.is_stunned():
+		var boss_pos := Vector2(_boss_group.position.x, _boss_group.position.z)
+		var to_hero := _hero_pos2d - boss_pos
+		if to_hero.length() > float(data["boss_keep_distance"]):
+			boss_pos += to_hero.normalized() * float(data["boss_speed"]) * delta
+			_boss_group.position = Vector3(boss_pos.x, 0.0, boss_pos.y)
+
+	# 호위병은 장수를 쫓고, 장수나 꼬리에 닿아 있는 동안 정해진 간격으로 병사를 쓰러뜨린다
+	for escort: EnemyGroup in _escort_groups.duplicate():
+		if not is_instance_valid(escort):
+			_escort_groups.erase(escort)
+			continue
+		var at := Vector2(escort.position.x, escort.position.z)
+		at += (_hero_pos2d - at).normalized() * float(data["escort_speed"]) * delta
+		escort.position = Vector3(at.x, 0.0, at.y)
+		var key := escort.get_instance_id()
+		if EncircleScript.is_hit(at, float(data["escort_contact"]), _hero_pos2d, _trail_nodes):
+			_escort_bite_left[key] = float(_escort_bite_left.get(key, 0.0)) - delta
+			if float(_escort_bite_left[key]) <= 0.0:
+				_escort_bite_left[key] = float(data["escort_bite_interval"])
+				army.lose_soldiers(_encircle.escort_bite(army))
+				Sound.play("ally_die")
+				_sfx.play("hit")
+		else:
+			_escort_bite_left[key] = 0.0
+	if not army.is_alive():
+		_on_defeat()
+		return
+
+	# 새 공격의 예고: 떨어질 자리에 원을 깔고, 불덩이는 그 자리로 날린다
+	var attacks: Array[Dictionary] = _encircle.start_attacks(delta, _hero_pos2d, _hero_heading, float(data["move_speed"]), _trail_nodes, _arena_center, _rng)
+	for attack in attacks:
+		var at: Vector2 = attack["pos"]
+		var marker := _boss_view.show_target(Vector3(at.x, 0.0, at.y), float(attack["radius"]), float(attack["time"]))
+		attack["marker"] = marker
+		_encircle_hazards.append(attack)
+		if attack["kind"] == "orb":
+			var from := _boss_group.global_position + Vector3.UP * _boss_height * float(boss_view["orb_from_height"])
+			_boss_view.fire_orb(from, marker, float(attack["time"]))
+			Sound.play("boss_fireball")
+		else:
+			_boss_group.pulse(float(boss_view["cast_pulse"]), float(boss_view["cast_pulse_time"]))
+			Sound.play("boss_warn")
+
+	# 떨어지는 순간 장수나 꼬리가 원 안에 있으면 병력을 잃는다
+	for hazard: Dictionary in _encircle_hazards.duplicate():
+		hazard["time"] = float(hazard["time"]) - delta
+		if float(hazard["time"]) > 0.0:
+			continue
+		_encircle_hazards.erase(hazard)
+		var marker: Node3D = hazard["marker"]
+		if is_instance_valid(marker):
+			marker.queue_free()
+		var at: Vector2 = hazard["pos"]
+		var radius := float(hazard["radius"])
+		var kind := str(hazard["kind"])
+		var hit: bool = EncircleScript.is_hit(at, radius, _hero_pos2d, _trail_nodes)
+		var stat := "zone" if kind == "zone" else "fireball"
+		_boss_stats[stat + "s"] = int(_boss_stats.get(stat + "s", 0)) + 1
+		if kind == "zone":
+			_spawn_encircle_bolt(at)
+			_fx.burst("boss_zone", Vector3(at.x, 0.5, at.y), Color(0, 0, 0, 0), radius)
+			Sound.play("boss_lightning")
+		else:
+			_fx.burst("boss_hit", Vector3(at.x, 1.0, at.y), Color(0, 0, 0, 0), radius)
+			Sound.play("boss_fireball_hit")
+		if hit:
+			_boss_stats[stat + "_hits"] = int(_boss_stats.get(stat + "_hits", 0)) + 1
+			var lost: int = _encircle.loss(kind, army)
+			army.lose_soldiers(lost)
+			_shake_time = float(_tuning["screen_shake_duration"])
+			_hud.show_delta("-%d" % lost, _popup_anchor(), Color.html(_tuning["colors"]["enemy"]))
+			Sound.play("ally_die")
+		elif kind == "zone":
+			_hud.show_delta(boss_view["dodge_text"], _popup_anchor(), Color.html(boss_view["dodge_color"]))
+			Sound.play("boss_dodge")
+		if not army.is_alive():
+			_on_defeat()
+			return
+
+
+func _spawn_boss_escorts() -> void:
+	var data: Dictionary = _tuning["encircle"]
+	var color := Color.html(_tuning["colors"]["enemy"])
+	# 결투장 좌우 가장자리 쪽에서 한 무리씩 나타난다
+	for side in [-1.0, 1.0]:
+		var group: EnemyGroup = EnemyGroupScene.instantiate()
+		add_child(group)
+		group.position = Vector3(_arena_center.x + side * float(data["rx"]) * float(data["escort_side_ratio"]), 0.0, _arena_center.y + float(data["boss_offset"]))
+		group.section = _section_count + 1
+		group.setup({data["escort_unit"]: int(data["escort_count"])}, _units, _tuning, _visual, color)
+		group.set_running(true)
+		_escort_groups.append(group)

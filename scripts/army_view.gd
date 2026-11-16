@@ -34,6 +34,12 @@ var _center_z := 0.0
 var _dying: Array[Dictionary] = []
 # 죽은 병사를 날려 보내는 설정(visual.json의 soldier.death_fly). 비어 있으면 제자리에서 작아진다
 var _death_fly := {}
+# 보스 포위전(십면매복)에서는 대형 대신 장수 뒤의 꼬리로 그린다. 그동안 이 노드는 원점에 두고 병사를 월드 좌표로 쓴다
+var _trail_mode := false
+var _trail_head := Vector2.ZERO
+var _trail_nodes := PackedVector2Array()
+var _trail_columns := 1
+var _trail_column_spacing := 0.0
 
 
 func setup(army: Army, units: Dictionary, tuning: Dictionary, visual: Dictionary, color: Color, facing: float, bob_height: float, fixed_front_radius := -1.0) -> void:
@@ -108,7 +114,27 @@ func set_death_fly(data: Dictionary) -> void:
 	_death_time = float(data["time"])
 
 
-## 달릴 때의 위아래 흔들림 높이를 바꾼다(적 무리가 서 있다가 달려올 때).
+## 보스 포위전의 꼬리 그리기를 켜거나 끈다.
+func set_trail_mode(enabled: bool) -> void:
+	_trail_mode = enabled
+	# 대형일 때의 병사 위치는 이 노드 기준이라 꼬리(월드 좌표)와 섞이지 않게 비운다
+	_alive_transforms.clear()
+	_dying.clear()
+	if not enabled:
+		_rebuild()
+
+
+## 꼬리를 다시 그린다. head는 장수 위치, nodes는 줄(마디)의 위치(앞에서부터), columns는 한 줄에 서는 수,
+## column_spacing은 옆 사람과의 간격이다. 좌표는 월드의 (x, z)다.
+func update_trail(head: Vector2, nodes: PackedVector2Array, columns: int, column_spacing: float) -> void:
+	_trail_head = head
+	_trail_nodes = nodes
+	_trail_columns = maxi(columns, 1)
+	_trail_column_spacing = column_spacing
+	if _trail_mode:
+		_rebuild_trail()
+
+
 func set_bob(height: float) -> void:
 	_material.set_shader_parameter("bob_height", height)
 
@@ -141,6 +167,9 @@ func _front_radius() -> float:
 
 
 func _rebuild() -> void:
+	if _trail_mode:
+		_rebuild_trail()
+		return
 	if _army.unit_type != _unit_type:
 		_unit_type = _army.unit_type
 		multimesh.instance_count = 0
@@ -236,3 +265,53 @@ func _get_mesh(unit_type: String) -> Mesh:
 	if not _mesh_cache.has(unit_type):
 		_mesh_cache[unit_type] = ModelBuilder.model(unit_type, _visual)
 	return _mesh_cache[unit_type]
+
+
+func _rebuild_trail() -> void:
+	if _army.unit_type != _unit_type:
+		_unit_type = _army.unit_type
+		multimesh.instance_count = 0
+		multimesh.mesh = _get_mesh(_unit_type)
+		multimesh.instance_count = _display_limit * 2
+		_dying.clear()
+		_alive_transforms.clear()
+
+	var shown := mini(_army.count, _display_limit)
+	# 줄어든 만큼은 그 자리에서 튕겨 날아간다(이 노드가 원점에 있으므로 장수를 따라 움직이지 않는다)
+	for i in range(shown, _alive_transforms.size()):
+		_dying.append(_dying_entry(_alive_transforms[i]))
+	while _dying.size() > _display_limit:
+		_dying.pop_front()
+
+	_center_z = 0.0
+	_alive_transforms.resize(shown)
+	var scale_factor := model_scale(_unit_type, _visual)
+	for i in shown:
+		var rank := mini(i / _trail_columns, _trail_nodes.size() - 1)
+		var column := i % _trail_columns
+		var at := _trail_nodes[rank] if rank >= 0 else _trail_head
+		var ahead := _trail_head if rank <= 0 else _trail_nodes[rank - 1]
+		var forward := (ahead - at).normalized() if ahead.distance_squared_to(at) > 0.0001 else Vector2.UP
+		# 줄의 가운데를 기준으로 좌우로 벌려 선다
+		var side := (column - (_trail_columns - 1) / 2.0) * _trail_column_spacing
+		var spot := at + forward.orthogonal() * side
+		var basis := Basis(Vector3.UP, -forward.angle() - PI / 2.0).scaled(Vector3.ONE * scale_factor)
+		_alive_transforms[i] = Transform3D(basis, Vector3(spot.x, 0.0, spot.y))
+		multimesh.set_instance_transform(i, _alive_transforms[i])
+		multimesh.set_instance_custom_data(i, Color(fposmod(i * PHASE_STEP, 1.0), 0.0, 0.0, 0.0))
+		multimesh.set_instance_color(i, Color.WHITE)
+	_write_dying()
+
+
+## 사라지는 병사 한 명의 기록. 튕겨 날아가는 설정이 있으면 속도와 회전을 정한다.
+func _dying_entry(transform: Transform3D) -> Dictionary:
+	var entry := {"transform": transform, "t": 0.0}
+	if not _death_fly.is_empty():
+		var back: Array = _death_fly["back_speed"]
+		var up: Array = _death_fly["up_speed"]
+		var spin: Array = _death_fly["spin_speed"]
+		var side := float(_death_fly["side_speed"])
+		entry["velocity"] = Vector3(randf_range(-side, side), randf_range(float(up[0]), float(up[1])), randf_range(-float(back[1]), float(back[1])))
+		entry["axis"] = Vector3(randf_range(-1.0, 1.0), randf_range(-0.3, 0.3), randf_range(-1.0, 1.0)).normalized()
+		entry["spin"] = randf_range(float(spin[0]), float(spin[1]))
+	return entry

@@ -208,11 +208,11 @@ function render(build) {
   const boss = new Map();
   for (const e of of("boss_end")) push(boss, e.stage + "|" + e.hero, e.data);
   const sum = (items, key) => items.reduce((total, d) => total + (d[key] || 0), 0);
-  out.push("<h2>보스전</h2>", table(["스테이지", "장수", "보스전 수", "승률", "도달 병력 중앙값", "길이 중앙값(초)", "구역 공격에 맞은 비율", "불덩이에 맞은 비율"],
+  out.push("<h2>보스전</h2>", table(["스테이지", "장수", "보스전 수", "승률", "도달 병력 중앙값", "길이 중앙값(초)", "포위 횟수 중앙값", "구역 공격에 맞은 비율", "불덩이에 맞은 비율"],
     [...boss.entries()].sort((a, b) => stageOrder(a[0], b[0])).map(([key, items]) => {
       const [stage, hero] = key.split("|");
       return [escapeHtml(stage), label(hero), items.length, percent(items.filter(d => d.cleared).length, items.length),
-        Math.round(median(items.map(d => d.count_start || 0))), Math.round(median(items.map(d => d.seconds || 0))),
+        Math.round(median(items.map(d => d.count_start || 0))), Math.round(median(items.map(d => d.seconds || 0))), Math.round(median(items.map(d => d.encircles || 0))),
         percent(sum(items, "zone_hits"), sum(items, "zones")), percent(sum(items, "fireball_hits"), sum(items, "fireballs"))];
     })));
 

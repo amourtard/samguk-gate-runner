@@ -64,7 +64,7 @@ func setup(result: Dictionary, stage_id: String, can_go_next: bool) -> void:
 	gold_label.add_theme_color_override("font_color", Color.html(_ui["win_color"]))
 	var gold_parts: Array[Control] = [gold_label]
 	if int(result["gold_bonus"]) > 0:
-		var note := _label("(함정 +%s 포함)" % UpgradeScreen.gold_text(int(result["gold_bonus"])))
+		var note := _label("(함정·포위 +%s 포함)" % UpgradeScreen.gold_text(int(result["gold_bonus"])))
 		note.modulate = Color(1, 1, 1, 0.7)
 		gold_parts.append(note)
 	_add_row("금화", gold_parts)

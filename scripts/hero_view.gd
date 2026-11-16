@@ -55,3 +55,11 @@ func set_flag_text_visible(on: bool) -> void:
 ## 아군 무리의 앞줄(계산 위치)보다 한 걸음 앞에 선다.
 func follow(army_position: Vector3, front_radius: float) -> void:
 	position = Vector3(army_position.x, 0.0, army_position.z - front_radius - _ahead_front)
+	rotation.y = 0.0
+
+
+## 보스전 2페이즈(십면매복)에서 360도 방향을 바라보며 선두에 선다.
+func follow_360(world_pos: Vector3, heading: float) -> void:
+	position = world_pos
+	rotation.y = -heading - PI / 2.0
+

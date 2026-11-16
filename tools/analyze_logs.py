@@ -168,8 +168,8 @@ def report(events, build=None):
     for (stage, hero), items in sorted(boss.items()):
         zones, zone_hits = sum(d.get("zones", 0) for d in items), sum(d.get("zone_hits", 0) for d in items)
         balls, ball_hits = sum(d.get("fireballs", 0) for d in items), sum(d.get("fireball_hits", 0) for d in items)
-        rows.append([stage, hero, len(items), percent(sum(1 for d in items if d.get("cleared")), len(items)), f"{median([d.get('count_start', 0) for d in items]):.0f}", f"{median([d.get('seconds', 0) for d in items]):.0f}", percent(zone_hits, zones), percent(ball_hits, balls)])
-    out.append(table(["스테이지", "장수", "보스전 수", "승률", "도달 병력 중앙값", "길이 중앙값(초)", "구역 공격에 맞은 비율", "불덩이에 맞은 비율"], rows))
+        rows.append([stage, hero, len(items), percent(sum(1 for d in items if d.get("cleared")), len(items)), f"{median([d.get('count_start', 0) for d in items]):.0f}", f"{median([d.get('seconds', 0) for d in items]):.0f}", f"{median([d.get('encircles', 0) for d in items]):.0f}", percent(zone_hits, zones), percent(ball_hits, balls)])
+    out.append(table(["스테이지", "장수", "보스전 수", "승률", "도달 병력 중앙값", "길이 중앙값(초)", "포위 횟수 중앙값", "구역 공격에 맞은 비율", "불덩이에 맞은 비율"], rows))
 
     # 10. 결과 화면에서 누른 버튼, 강화
     out.append("## 결과 화면에서 누른 버튼\n")
